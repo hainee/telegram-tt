@@ -137,6 +137,14 @@ export type ApiUpdateChatInbox = {
   unreadCount: number;
 };
 
+/** 宿主集成：主线程 readState.unreadCount 变化（非 MTProto，由 reducer updateThread 派发） */
+export type ApiUpdateMainThread = {
+  '@type': 'updateThread';
+  chatId: string;
+  previousUnreadCount?: number;
+  unreadCount?: number;
+};
+
 export type ApiUpdateChatTypingStatus = {
   '@type': 'updateChatTypingStatus';
   id: string;
@@ -874,7 +882,8 @@ export type ApiUpdateWebPage = {
 export type ApiUpdate = (
   ApiUpdateReady | ApiUpdateSession | ApiUpdateWebAuthTokenFailed | ApiUpdateRequestUserUpdate |
   ApiUpdateAuthorizationState | ApiUpdateAuthorizationError | ApiUpdateConnectionState | ApiUpdateCurrentUser |
-  ApiUpdateChat | ApiUpdateChatInbox | ApiUpdateChatTypingStatus | ApiUpdateChatFullInfo | ApiUpdatePinnedChatIds |
+  ApiUpdateChat | ApiUpdateChatInbox | ApiUpdateMainThread | ApiUpdateChatTypingStatus |
+  ApiUpdateChatFullInfo | ApiUpdatePinnedChatIds |
   ApiUpdateChatMembers | ApiUpdateChatJoin | ApiUpdateChatLeave | ApiUpdateChatPinned | ApiUpdatePinnedMessageIds |
   ApiUpdateChatListType | ApiUpdateChatFolder | ApiUpdateChatFoldersOrder | ApiUpdateRecommendedChatFolders |
   ApiUpdateNewMessage | ApiUpdateMessage | ApiUpdateThreadInfo | ApiUpdateCommonBoxMessages |

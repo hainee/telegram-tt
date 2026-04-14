@@ -51,11 +51,18 @@ import {
   selectViewportIds,
   selectWebPage,
 } from '../selectors';
+import { execAfterActions, getActions } from '../index';
+import { updateChat } from './chats';
 import { removeIdFromSearchResults } from './middleSearch';
 import { updateTabState } from './tabs';
 import { clearMessageTranslation } from './translations';
 
 type MessageStoreSections = GlobalState['messages']['byChatId'][string];
+
+/** Thread 在 store 中含 readState；声明文件未逐字段展开 */
+type ThreadWithReadState = Thread & {
+  readState?: { unreadCount?: number };
+};
 
 export function updateCurrentMessageList<T extends GlobalState>(
   global: T,
@@ -133,16 +140,36 @@ export function updateThread<T extends GlobalState>(
   }
 
   const current = global.messages.byChatId[chatId];
+  const prevSlice = current?.threadsById?.[threadId] as ThreadWithReadState | undefined;
+  const mergedThread: ThreadWithReadState = {
+    ...prevSlice,
+    ...threadUpdate,
+  } as ThreadWithReadState;
 
-  return updateMessageStore(global, chatId, {
+  let globalNext = updateMessageStore(global, chatId, {
     threadsById: {
       ...(current?.threadsById),
-      [threadId]: {
-        ...(current?.threadsById[threadId]),
-        ...threadUpdate,
-      },
+      [threadId]: mergedThread as Thread,
     },
   });
+
+  if (threadId === MAIN_THREAD_ID) {
+    const prevUc = prevSlice?.readState?.unreadCount;
+    const nextUc = mergedThread.readState?.unreadCount;
+    if (prevUc !== nextUc) {
+      globalNext = updateChat(globalNext, chatId, { unreadCount: nextUc ?? 0 });
+      execAfterActions(() => {
+        getActions().apiUpdate({
+          '@type': 'updateThread',
+          chatId,
+          previousUnreadCount: prevUc,
+          unreadCount: nextUc,
+        });
+      });
+    }
+  }
+
+  return globalNext;
 }
 
 export function updateMessageStore<T extends GlobalState>(

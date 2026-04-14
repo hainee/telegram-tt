@@ -3,6 +3,9 @@ export {
   setForceHttpTransport, setShouldDebugExportedSenders, setAllowHttpTransport, requestChannelDifference,
 } from './client';
 
+export { fetchResourceHeaders } from './resourceHeaders';
+export type { FetchResourceHeadersResult } from './resourceHeaders';
+
 export {
   provideAuthPhoneNumber, provideAuthCode, provideAuthPassword, provideAuthRegistration, restartAuth, restartAuthWithQr,
 } from './auth';
