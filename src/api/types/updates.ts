@@ -137,9 +137,9 @@ export type ApiUpdateChatInbox = {
   unreadCount: number;
 };
 
-/** 宿主集成：主线程 readState.unreadCount 变化（非 MTProto，由 reducer updateThread 派发） */
+/** 宿主集成：会话未读条数变化（非 MTProto；主路径为 chats.updateChat 写入 ApiChat.unreadCount，见 reducer updateChat） */
 export type ApiUpdateMainThread = {
-  '@type': 'updateThread';
+  '@type': 'updateThreadReadState';
   chatId: string;
   previousUnreadCount?: number;
   unreadCount?: number;

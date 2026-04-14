@@ -51,7 +51,6 @@ import {
   selectViewportIds,
   selectWebPage,
 } from '../selectors';
-import { execAfterActions, getActions } from '../index';
 import { updateChat } from './chats';
 import { removeIdFromSearchResults } from './middleSearch';
 import { updateTabState } from './tabs';
@@ -156,16 +155,11 @@ export function updateThread<T extends GlobalState>(
   if (threadId === MAIN_THREAD_ID) {
     const prevUc = prevSlice?.readState?.unreadCount;
     const nextUc = mergedThread.readState?.unreadCount;
-    if (prevUc !== nextUc) {
-      globalNext = updateChat(globalNext, chatId, { unreadCount: nextUc ?? 0 });
-      execAfterActions(() => {
-        getActions().apiUpdate({
-          '@type': 'updateThread',
-          chatId,
-          previousUnreadCount: prevUc,
-          unreadCount: nextUc,
-        });
-      });
+    const prevNorm = prevUc ?? 0;
+    const nextNorm = nextUc ?? 0;
+    if (prevNorm !== nextNorm) {
+      // 与 chat.unreadCount 对齐；宿主通知仅由 reducers/chats.updateChat 内 execAfterActions 派发一次，避免重复 apiUpdate
+      globalNext = updateChat(globalNext, chatId, { unreadCount: nextNorm });
     }
   }
 

@@ -50,6 +50,36 @@
   <link rel="alternate icon" href="./favicon.ico" type="image/x-icon">
   <link rel="manifest" id="the-manifest-placeholder" href="./<%= htmlWebpackPlugin.options.manifest %>">
 
+  <style id="message-input-locked-style">
+    .middle-column-footer:after {
+      content: '账户登录中，请稍后...';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 16px;
+      color: #fff;
+      cursor: not-allowed;
+      transition: all 0.3s ease;
+      border-radius: 5px;
+    }
+
+    .middle-column-footer:hover:after {
+      text-decoration: underline;
+      font-weight: bold;
+    }
+
+    .middle-column-footer > div {
+      visibility: hidden;
+    }
+  </style>
+
   <script src="./redirect.js"></script>
 </head>
 

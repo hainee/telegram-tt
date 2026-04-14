@@ -9,6 +9,7 @@ import { areDeepEqual } from '../../util/areDeepEqual';
 import {
   areSortedArraysEqual, buildCollectionByKey, omit, omitUndefined, pick, unique,
 } from '../../util/iteratees';
+import { getActions } from '../index';
 import { selectChatFullInfo } from '../selectors';
 
 const DEFAULT_CHAT_LISTS: ChatListType[] = ['active', 'archived'];
@@ -172,6 +173,25 @@ export function updateChat<T extends GlobalState>(
   const updatedChat = getUpdatedChat(global, chatId, chatUpdate, noOmitUnreadReactionCount);
   if (!updatedChat) {
     return global;
+  }
+
+  const prevUnreadNorm = chat?.unreadCount ?? 0;
+  const nextUnreadNorm = updatedChat.unreadCount ?? 0;
+  if (prevUnreadNorm !== nextUnreadNorm) {
+    /**
+     * 勿用 execAfterActions：它仍在 handleAction 的 while(afterActionQueue) 内同步执行。
+     * 宿主 onUpdateChatReadState等若在 apiUpdate 周期内再同步触发 apiUpdate，会在 forEach 上嵌套爆栈。
+     * 推到微任务后，当前 action 栈已清空，再派发宿主用 updateThreadReadState。
+     */
+    const hostPayload = {
+      '@type': 'updateThreadReadState' as const,
+      chatId,
+      previousUnreadCount: prevUnreadNorm,
+      unreadCount: nextUnreadNorm,
+    };
+    queueMicrotask(() => {
+      getActions().apiUpdate(hostPayload);
+    });
   }
 
   return replaceChats(global, {
