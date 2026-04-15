@@ -25,9 +25,9 @@ import {
   getIsSavedDialog,
   getMessageSendingRestrictionReason,
   isChatChannel,
-  isChatGroup,
   isChatSuperGroup,
   isUserRightBanned,
+  shouldLoadChatFullInfoForGroupMentions,
 } from '../../global/helpers';
 import {
   selectBot,
@@ -811,7 +811,7 @@ export default memo(withGlobal<OwnProps>(
     const canStartBot = !canRestartBot && isBotNotStarted;
     const canUnblock = isUserBlocked && !bot;
     const shouldLoadFullChat = Boolean(
-      chat && isChatGroup(chat) && !chatFullInfo,
+      chat && shouldLoadChatFullInfoForGroupMentions(chat, chatFullInfo),
     );
     const draftReplyInfo = selectDraft(global, chatId, threadId)?.replyInfo;
     const shouldBlockSendInForum = chat?.isForum

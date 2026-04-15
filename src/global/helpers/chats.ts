@@ -37,6 +37,27 @@ export function isChatGroup(chat: ApiChat) {
   return isChatBasicGroup(chat) || isChatSuperGroup(chat);
 }
 
+/**
+ * 群聊 Composer 中 @ 提及列表依赖 ApiChatFullInfo.members。
+ * 若仅存在「残缺」的 fullInfo（例如 MTProto 先推了不含 participants 的 updateChatFullInfo），
+ * 旧逻辑因 chatFullInfo 已存在而不再 loadFullChat，会导致 members 始终为空、输入 @ 无列表。
+ */
+export function shouldLoadChatFullInfoForGroupMentions(
+  chat: ApiChat,
+  chatFullInfo: ApiChatFullInfo | undefined,
+): boolean {
+  if (!isChatGroup(chat)) {
+    return false;
+  }
+  if (!chatFullInfo) {
+    return true;
+  }
+  if (chatFullInfo.canViewMembers === false) {
+    return false;
+  }
+  return !(chatFullInfo.members && chatFullInfo.members.length > 0);
+}
+
 export function isChatBasicGroup(chat: ApiChat) {
   return chat.type === 'chatTypeBasicGroup';
 }
