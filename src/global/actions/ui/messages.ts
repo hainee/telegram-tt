@@ -89,6 +89,7 @@ addActionHandler('setScrollOffset', (global, actions, payload): ActionReturnType
   return replaceTabThreadParam(global, chatId, threadId, 'scrollOffset', scrollOffset, tabId);
 });
 
+// setEditingId：与 Electron hook 约定——payload 上存在 `text` 键则优先用其值写入 editingDraft（输入框），否则清空草稿并由 useEditing 走消息原文
 addActionHandler('setEditingId', (global, actions, payload): ActionReturnType => {
   const { messageId, tabId = getCurrentTabId() } = payload;
   const currentMessageList = selectCurrentMessageList(global, tabId);
@@ -98,8 +99,25 @@ addActionHandler('setEditingId', (global, actions, payload): ActionReturnType =>
 
   const { chatId, threadId, type } = currentMessageList;
   const paramName = type === 'scheduled' ? 'editingScheduledId' : 'editingId';
+  const draftParamName = type === 'scheduled' ? 'editingScheduledDraft' : 'editingDraft';
 
-  return replaceThreadParam(global, chatId, threadId, paramName, messageId);
+  let nextGlobal = global;
+  if (messageId === undefined) {
+    nextGlobal = replaceThreadParam(nextGlobal, chatId, threadId, draftParamName, undefined);
+  } else if (Object.prototype.hasOwnProperty.call(payload, 'text')) {
+    const { text: rawText } = payload;
+    const draftValue = rawText === undefined
+      ? undefined
+      : typeof rawText === 'string'
+        ? { text: rawText }
+        : rawText;
+    nextGlobal = replaceThreadParam(nextGlobal, chatId, threadId, draftParamName, draftValue);
+  } else {
+    // 未带 text 字段：不沿用旧 editingDraft，输入框内容由消息正文决定（useEditing）
+    nextGlobal = replaceThreadParam(nextGlobal, chatId, threadId, draftParamName, undefined);
+  }
+
+  return replaceThreadParam(nextGlobal, chatId, threadId, paramName, messageId);
 });
 
 addActionHandler('setEditingDraft', (global, actions, payload): ActionReturnType => {
@@ -133,7 +151,9 @@ addActionHandler('editLastMessage', (global, actions, payload): ActionReturnType
     return undefined;
   }
 
-  return replaceThreadParam(global, chatId, threadId, 'editingId', lastOwnEditableMessageId);
+  let nextGlobal = replaceThreadParam(global, chatId, threadId, 'editingDraft', undefined);
+  nextGlobal = replaceThreadParam(nextGlobal, chatId, threadId, 'editingId', lastOwnEditableMessageId);
+  return nextGlobal;
 });
 
 addActionHandler('replyToNextMessage', (global, actions, payload): ActionReturnType => {

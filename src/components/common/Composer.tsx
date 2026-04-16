@@ -122,6 +122,7 @@ import parseHtmlAsFormattedText from '../../util/parseHtmlAsFormattedText';
 import { insertHtmlInSelection } from '../../util/selection';
 import { getServerTime } from '../../util/serverTime';
 import windowSize from '../../util/windowSize';
+import { mergeMentionDebugSnapshot } from '../../util/mentionDebug';
 import { DEFAULT_MAX_MESSAGE_LENGTH } from '../../limits';
 import applyIosAutoCapitalizationFix from '../middle/composer/helpers/applyIosAutoCapitalizationFix';
 import buildAttachment, { prepareAttachmentsToSend } from '../middle/composer/helpers/buildAttachment';
@@ -783,7 +784,9 @@ const Composer: FC<OwnProps & StateProps> = ({
     insertMention,
     mentionFilteredUsers,
   } = useMentionTooltip(
-    Boolean(isInMessageList && isReady && isForCurrentMessageList && !hasAttachments),
+    // 不依赖 isReady：MiddleColumn 在移动端或过渡未触发 transitionend 时 isReady 可能长期为 false，
+    // 会导致 @ 提及永远不启用（见 mentionDebug composer.mentionIsEnabled）。
+    Boolean(isInMessageList && isForCurrentMessageList && !hasAttachments),
     getHtml,
     setHtml,
     getSelectionRange,
@@ -792,6 +795,30 @@ const Composer: FC<OwnProps & StateProps> = ({
     topInlineBotIds,
     currentUserId,
   );
+
+  useEffect(() => {
+    mergeMentionDebugSnapshot('composer', {
+      chatId,
+      threadId,
+      isInMessageList,
+      isReady,
+      isForCurrentMessageList,
+      hasAttachments,
+      mentionIsEnabled: Boolean(isInMessageList && isForCurrentMessageList && !hasAttachments),
+      groupChatMembersCount: groupChatMembers?.length ?? 0,
+      chatFullInfoMembersCount: chatFullInfo?.members?.length ?? 0,
+      hasChatFullInfo: Boolean(chatFullInfo),
+    });
+  }, [
+    chatId,
+    threadId,
+    isInMessageList,
+    isReady,
+    isForCurrentMessageList,
+    hasAttachments,
+    groupChatMembers,
+    chatFullInfo,
+  ]);
 
   useEffect(() => {
     if (!insertingPeerIdMention) return;
@@ -813,7 +840,7 @@ const Composer: FC<OwnProps & StateProps> = ({
     help: inlineBotHelp,
     loadMore: loadMoreForInlineBot,
   } = useInlineBotTooltip(
-    Boolean(isInMessageList && isReady && isForCurrentMessageList && !hasAttachments),
+    Boolean(isInMessageList && isForCurrentMessageList && !hasAttachments),
     chatId,
     getHtml,
     inlineBots,
@@ -828,7 +855,6 @@ const Composer: FC<OwnProps & StateProps> = ({
     filteredQuickReplies: quickReplyCommands,
   } = useChatCommandTooltip(
     Boolean(isInMessageList
-      && isReady
       && isForCurrentMessageList
       && ((botCommands && botCommands?.length) || chatBotCommands?.length || (hasQuickReplies && canSendQuickReplies))),
     getHtml,

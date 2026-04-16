@@ -704,6 +704,8 @@ export interface ActionPayloads {
   };
   setEditingId: {
     messageId?: number;
+    /** 若传入则优先用于回填输入框（可为纯文本或与 Api一致的带实体对象） */
+    text?: ApiFormattedText | string;
   } & WithTabId;
   editLastMessage: WithTabId | undefined;
   saveDraft: {

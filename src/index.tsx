@@ -67,6 +67,10 @@ async function init() {
   await initGlobal();
   getActions().init();
 
+  if (process.env.TT_DEBUG_DIST === '1') {
+    void import('./util/forwardActionTrace').then((m) => m.registerForwardTraceGlobalApi());
+  }
+
   getActions().updateShouldEnableDebugLog();
   getActions().updateShouldDebugExportedSenders();
 

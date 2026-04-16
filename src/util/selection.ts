@@ -46,7 +46,33 @@ export function getHtmlBeforeSelection(container?: HTMLElement, useCommonAncesto
   extractorEl.innerHTML = '';
   extractorEl.appendChild(range.cloneContents());
 
-  return extractorEl.innerHTML;
+   return extractorEl.innerHTML;
+}
+
+/**
+ * 输入框内光标前的纯文本（与 getHtmlBeforeSelection 互补：部分 WebView/套壳下选区
+ * commonAncestor 不在 container 内会导致 HTML 截图为空，但 Range 仍指向输入框，此处仍可得到正确文本）。
+ */
+export function getPlainTextBeforeCaret(container?: HTMLElement): string {
+  if (!container) {
+    return '';
+  }
+
+  const selection = window.getSelection();
+  if (!selection?.rangeCount) {
+    return '';
+  }
+
+  const range = selection.getRangeAt(0);
+  if (!range.intersectsNode(container)) {
+    return '';
+  }
+
+  const caretRange = document.createRange();
+  caretRange.selectNodeContents(container);
+  caretRange.setEnd(range.endContainer, range.endOffset);
+
+  return caretRange.toString();
 }
 
 // https://stackoverflow.com/a/3976125

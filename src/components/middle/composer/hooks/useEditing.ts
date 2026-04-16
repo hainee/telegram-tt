@@ -56,7 +56,10 @@ const useEditing = (
       return;
     }
 
-    const text = !prevEditedMessage && editingDraft?.text.length ? editingDraft : editedMessage.content.text;
+    // setEditingId 若传入 text 会写入 editingDraft；此处 editingDraft 有定义则优先于消息原文（含空字符串）
+    const text = editingDraft !== undefined
+      ? editingDraft
+      : editedMessage.content.text;
     const html = getTextWithEntitiesAsHtml(text);
 
     setHtml(html);

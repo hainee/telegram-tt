@@ -11,7 +11,9 @@ import { getMainUsername } from '../../../../global/helpers';
 import { filterPeersByQuery, getPeerTitle } from '../../../../global/helpers/peers';
 import focusEditableElement from '../../../../util/focusEditableElement';
 import { pickTruthy, unique } from '../../../../util/iteratees';
-import { getCaretPosition, getHtmlBeforeSelection, setCaretPosition } from '../../../../util/selection';
+import {
+  getCaretPosition, getHtmlBeforeSelection, getPlainTextBeforeCaret, setCaretPosition,
+} from '../../../../util/selection';
 import { prepareForRegExp } from '../helpers/prepareForRegExp';
 
 import { useThrottledResolver } from '../../../../hooks/useAsyncResolvers';
@@ -19,6 +21,7 @@ import useDerivedSignal from '../../../../hooks/useDerivedSignal';
 import useFlag from '../../../../hooks/useFlag';
 import useLang from '../../../../hooks/useLang';
 import useLastCallback from '../../../../hooks/useLastCallback';
+import { mergeMentionDebugSnapshot } from '../../../../util/mentionDebug';
 
 const THROTTLE = 300;
 
@@ -48,9 +51,31 @@ export default function useMentionTooltip(
     const html = getHtml();
     if (!isEnabled || !getSelectionRange()?.collapsed || !html.includes('@')) return undefined;
 
-    const htmlBeforeSelection = getHtmlBeforeSelection(inputRef.current);
+    const inputEl = inputRef.current;
+    if (!inputEl) return undefined;
 
-    return prepareForRegExp(htmlBeforeSelection).match(RE_USERNAME_SEARCH)?.[0].trim();
+    const plainBefore = getPlainTextBeforeCaret(inputEl);
+    const htmlBefore = getHtmlBeforeSelection(inputEl);
+    let sourceForTag = plainBefore.length > 0 ? plainBefore : prepareForRegExp(htmlBefore);
+    if (!sourceForTag && html.includes('@')) {
+      const pos = getCaretPosition(inputEl);
+      const text = (inputEl.innerText || '').replace(/\u00A0/g, ' ');
+      sourceForTag = text.slice(0, pos);
+    }
+    const match = sourceForTag.match(RE_USERNAME_SEARCH);
+    const tag = match?.[0]?.trim();
+    mergeMentionDebugSnapshot('parseAtTag', {
+      isEnabled,
+      htmlLen: html.length,
+      htmlHasAt: html.includes('@'),
+      selectionCollapsed: getSelectionRange()?.collapsed ?? null,
+      plainBeforeLen: plainBefore.length,
+      htmlBeforeLen: htmlBefore.length,
+      sourceForTagLen: sourceForTag.length,
+      sourceForTagTail: sourceForTag.slice(Math.max(0, sourceForTag.length - 40)),
+      parsedUsernameTag: tag ?? null,
+    });
+    return tag;
   }, [isEnabled, getHtml, getSelectionRange, inputRef], THROTTLE);
 
   const getUsernameTag = useDerivedSignal(
@@ -65,6 +90,13 @@ export default function useMentionTooltip(
     const usernameTag = getUsernameTag();
 
     if (!usernameTag || !(groupChatMembers || topInlineBotIds)) {
+      mergeMentionDebugSnapshot('filterUsers', {
+        earlyExit: true,
+        reason: !usernameTag ? 'noUsernameTag' : 'noMembersAndNoInlineBots',
+        usernameTag: usernameTag ?? null,
+        groupChatMembersCount: groupChatMembers?.length ?? 0,
+        topInlineBotIdsCount: topInlineBotIds?.length ?? 0,
+      });
       setFilteredUsers(undefined);
       return;
     }
@@ -72,6 +104,7 @@ export default function useMentionTooltip(
     // No need for expensive global updates on users, so we avoid them
     const usersById = getGlobal().users.byId;
     if (!usersById) {
+      mergeMentionDebugSnapshot('filterUsers', { earlyExit: true, reason: 'noUsersById' });
       setFilteredUsers(undefined);
       return;
     }
@@ -85,16 +118,36 @@ export default function useMentionTooltip(
     }, []);
 
     const filter = usernameTag.substring(1);
+    const candidateIds = unique([
+      ...((getWithInlineBots() && topInlineBotIds) || []),
+      ...(memberIds || []),
+    ]);
     const filteredIds = filterPeersByQuery({
-      ids: unique([
-        ...((getWithInlineBots() && topInlineBotIds) || []),
-        ...(memberIds || []),
-      ]),
+      ids: candidateIds,
       query: filter,
       type: 'user',
+      chatMembers: groupChatMembers,
+    });
+    const picked = pickTruthy(usersById, filteredIds);
+    const usersOut = Object.values(picked);
+
+    const sampleMemberId = memberIds?.[0];
+    const sampleResolved = sampleMemberId ? Boolean(usersById[sampleMemberId]) : null;
+    const missingUserCount = filteredIds.filter((id) => !usersById[id]).length;
+
+    mergeMentionDebugSnapshot('filterUsers', {
+      earlyExit: false,
+      filterQuery: filter,
+      withInlineBotsPrefix: getWithInlineBots(),
+      candidateIdsCount: candidateIds.length,
+      filteredIdsCount: filteredIds.length,
+      resolvedUsersCount: usersOut.length,
+      missingUserInByIdAfterFilterCount: missingUserCount,
+      sampleMemberId: sampleMemberId ?? null,
+      sampleMemberResolvedInById: sampleResolved,
     });
 
-    setFilteredUsers(Object.values(pickTruthy(usersById, filteredIds)));
+    setFilteredUsers(usersOut);
   }, [currentUserId, groupChatMembers, topInlineBotIds, getUsernameTag, getWithInlineBots]);
 
   const insertMention = useLastCallback((
@@ -145,6 +198,14 @@ export default function useMentionTooltip(
   });
 
   useEffect(unmarkManuallyClosed, [unmarkManuallyClosed, getHtml]);
+
+  useEffect(() => {
+    mergeMentionDebugSnapshot('tooltipUi', {
+      filteredUsersCount: filteredUsers?.length ?? 0,
+      isManuallyClosed,
+      isMentionTooltipOpen: Boolean(filteredUsers?.length && !isManuallyClosed),
+    });
+  }, [filteredUsers, isManuallyClosed]);
 
   return {
     isMentionTooltipOpen: Boolean(filteredUsers?.length && !isManuallyClosed),

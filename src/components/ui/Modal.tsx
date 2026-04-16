@@ -195,7 +195,11 @@ const Modal: FC<OwnProps> = ({
           />
         )}
         <div className="modal-container">
-          <div className="modal-backdrop" onClick={!noBackdropClose ? onClose : undefined} />
+          {/* isOpen 已为 false 时可能仍处于关闭动画，遮罩若仍响应点击会误触发 onClose（例如转发选人后点空白） */}
+          <div
+            className="modal-backdrop"
+            onClick={!noBackdropClose && isOpen ? onClose : undefined}
+          />
           <div className={modalDialogClassName} ref={dialogRef} style={dialogStyle}>
             {renderHeader()}
             {dialogContent}

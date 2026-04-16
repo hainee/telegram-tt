@@ -1,11 +1,12 @@
-import type { ApiChat, ApiPeer, ApiUser } from '../../api/types';
+import type { ApiChat, ApiChatMember, ApiPeer, ApiUser } from '../../api/types';
 import type { OldLangFn } from '../../hooks/useOldLang';
 import type { CustomPeer } from '../../types';
 
 import { SERVICE_NOTIFICATIONS_USER_ID } from '../../config';
+import { buildCollectionByKey } from '../../util/iteratees';
 import { isUserId } from '../../util/entities/ids';
 import { getTranslationFn, type LangFn } from '../../util/localization';
-import { prepareSearchWordsForNeedle } from '../../util/searchWords';
+import { matchesFullNameFuzzy, prepareSearchWordsForNeedle } from '../../util/searchWords';
 import { selectChat, selectPeer, selectUser } from '../selectors';
 import { getGlobal } from '..';
 import { getChatTitle } from './chats';
@@ -19,14 +20,41 @@ export function isApiPeerUser(peer: ApiPeer): peer is ApiUser {
   return !isApiPeerChat(peer);
 }
 
+function matchTextField(
+  value: string | undefined,
+  searchWords: (haystack: string) => boolean,
+  query: string,
+): boolean {
+  if (!value) {
+    return false;
+  }
+  return searchWords(value) || matchesFullNameFuzzy(value, query);
+}
+
+/** 按号码数字串匹配（忽略空格、+、横线等），仅当查询中含数字时参与匹配 */
+function matchesPhoneNumberQuery(phoneNumber: string | undefined, query: string): boolean {
+  if (!phoneNumber || !query) {
+    return false;
+  }
+  const digitsPhone = phoneNumber.replace(/\D/g, '');
+  const digitsQuery = query.replace(/\D/g, '');
+  if (!digitsPhone || !digitsQuery) {
+    return false;
+  }
+  return digitsPhone.includes(digitsQuery);
+}
+
 export function filterPeersByQuery({
   ids,
   query,
   type = 'peer',
+  chatMembers,
 }: {
   ids: string[];
   query: string | undefined;
   type?: 'chat' | 'user' | 'peer';
+  /** 群成员时可传，用于按群内职务标题 customTitle 筛选 */
+  chatMembers?: ApiChatMember[];
 }) {
   if (!query) {
     return ids;
@@ -37,6 +65,10 @@ export function filterPeersByQuery({
   const searchWords = prepareSearchWordsForNeedle(query);
 
   const selectorFn = type === 'chat' ? selectChat : type === 'user' ? selectUser : selectPeer;
+
+  const memberByUserId = chatMembers?.length
+    ? buildCollectionByKey(chatMembers, 'userId')
+    : undefined;
 
   return ids.filter((id) => {
     const peer = selectorFn(global, id);
@@ -50,10 +82,39 @@ export function filterPeersByQuery({
     const isFoundInLocalized = localizedTitle ? searchWords(localizedTitle) : undefined;
 
     const name = getPeerFullTitle(lang, peer);
+    const fullNameForUser = isApiPeerUser(peer) ? getUserFullName(peer) : undefined;
+    const matchesFullName = fullNameForUser && query ? matchesFullNameFuzzy(fullNameForUser, query) : false;
+
+    const user = isApiPeerUser(peer) ? peer : undefined;
+    const customTitle = memberByUserId?.[id]?.customTitle;
+    const collectibleEmojiTitle = user?.emojiStatus?.type === 'collectible'
+      ? user.emojiStatus.title
+      : undefined;
+
+    const matchesUserNameFields = user && (
+      matchTextField(user.firstName, searchWords, query)
+      || matchTextField(user.lastName, searchWords, query)
+    );
+    const matchesUserTitleFields = user && (
+      matchTextField(customTitle, searchWords, query)
+      || matchTextField(user.botPlaceholder, searchWords, query)
+      || matchTextField(collectibleEmojiTitle, searchWords, query)
+    );
+
+    const matchesChatTitleFuzzy = isApiPeerChat(peer) && peer.title && matchesFullNameFuzzy(peer.title, query);
+
+    const matchesUsernameEntries = Boolean(peer.usernames?.find(({ username }) => (
+      searchWords(username) || matchesFullNameFuzzy(username, query)
+    )));
 
     return isFoundInLocalized
       || (name && searchWords(name))
-      || Boolean(peer.usernames?.find(({ username }) => searchWords(username)));
+      || matchesFullName
+      || matchesUserNameFields
+      || matchesUserTitleFields
+      || matchesChatTitleFuzzy
+      || (user && matchesPhoneNumberQuery(user.phoneNumber, query))
+      || matchesUsernameEntries;
   });
 }
 

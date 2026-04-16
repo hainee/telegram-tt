@@ -24,7 +24,11 @@ const {
   HEAD,
   APP_ENV = 'production',
   APP_MOCKED_CLIENT = '',
+  TT_DEBUG_DIST = '',
 } = process.env;
+
+/** 为 Electron/本地调试输出：不压缩、文件名无 contenthash，便于对照源码与设断点 */
+const isDebugDist = TT_DEBUG_DIST === '1' || TT_DEBUG_DIST === 'true';
 
 const DEFAULT_APP_TITLE = `Telegram${APP_ENV !== 'production' ? ' Beta' : ''}`;
 
@@ -99,10 +103,10 @@ export default function createConfig(
     },
 
     output: {
-      filename: '[name].[contenthash].js',
-      chunkFilename: '[id].[chunkhash].js',
-      assetModuleFilename: '[name].[contenthash][ext]',
-      path: path.resolve(__dirname, 'dist'),
+      filename: isDebugDist ? '[name].js' : '[name].[contenthash].js',
+      chunkFilename: isDebugDist ? '[name].chunk.js' : '[id].[chunkhash].js',
+      assetModuleFilename: isDebugDist ? '[name][ext]' : '[name].[contenthash][ext]',
+      path: path.resolve(__dirname, isDebugDist ? 'dist_debug' : 'dist'),
       clean: true,
     },
 
@@ -141,7 +145,9 @@ export default function createConfig(
                   namedExport: false,
                   exportLocalsConvention: 'camelCase',
                   auto: true,
-                  localIdentName: APP_ENV === 'production' ? '[sha1:hash:base64:8]' : '[name]__[local]',
+                  localIdentName: APP_ENV === 'production' && !isDebugDist
+                  ? '[sha1:hash:base64:8]'
+                  : '[name]__[local]',
                 },
               },
             },
@@ -201,11 +207,12 @@ export default function createConfig(
         template: 'src/index.html',
       }),
       new MiniCssExtractPlugin({
-        filename: '[name].[contenthash].css',
-        chunkFilename: '[name].[chunkhash].css',
+        filename: isDebugDist ? '[name].css' : '[name].[contenthash].css',
+        chunkFilename: isDebugDist ? '[name].chunk.css' : '[name].[chunkhash].css',
         ignoreOrder: true,
       }),
       new EnvironmentPlugin({
+        TT_DEBUG_DIST: isDebugDist ? '1' : '',
         APP_ENV,
         APP_MOCKED_CLIENT,
         // eslint-disable-next-line no-null/no-null
@@ -267,6 +274,7 @@ export default function createConfig(
     devtool: 'source-map',
 
     optimization: {
+      minimize: isDebugDist ? false : mode === 'production',
       splitChunks: {
         cacheGroups: {
           sharedComponents: {
@@ -275,8 +283,9 @@ export default function createConfig(
           },
         },
       },
-      ...(APP_ENV === 'staging' && {
+      ...((APP_ENV === 'staging' || isDebugDist) && {
         chunkIds: 'named',
+        moduleIds: 'named',
       }),
     },
   };
