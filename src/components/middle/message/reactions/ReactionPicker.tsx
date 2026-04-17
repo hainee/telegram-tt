@@ -17,6 +17,10 @@ import { MAIN_THREAD_ID } from '../../../../api/types';
 
 import { getReactionKey, getStoryKey } from '../../../../global/helpers';
 import {
+  buildSendMessageCapture,
+  dismissSendMessageCaptureUi,
+} from '../../../../global/helpers/captureSendMessageContext';
+import {
   selectChat,
   selectChatFullInfo,
   selectChatMessage,
@@ -27,6 +31,7 @@ import {
 } from '../../../../global/selectors';
 import buildClassName from '../../../../util/buildClassName';
 import { isUserId } from '../../../../util/entities/ids';
+import { getCurrentTabId } from '../../../../util/establishMultitabRole';
 import parseHtmlAsFormattedText from '../../../../util/parseHtmlAsFormattedText';
 import { REM } from '../../../common/helpers/mediaDimensions';
 import { buildCustomEmojiHtml } from '../../composer/helpers/customEmoji';
@@ -201,7 +206,15 @@ const ReactionPicker: FC<OwnProps & StateProps> = ({
       entities = customEmojiMessage.entities;
     }
 
-    sendMessage({ text, entities, isReaction: true });
+    const tabIdCap = getCurrentTabId();
+    const sendMessageCapture = buildSendMessageCapture(getGlobal(), undefined, tabIdCap);
+    dismissSendMessageCaptureUi(sendMessageCapture, undefined, tabIdCap);
+    sendMessage({
+      text,
+      entities,
+      isReaction: true,
+      sendMessageCapture,
+    });
     closeReactionPicker();
   });
 

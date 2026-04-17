@@ -1,13 +1,15 @@
 import type { FC } from '../../lib/teact/teact';
 import { memo, useEffect } from '../../lib/teact/teact';
-import { getActions, withGlobal } from '../../global';
+import { getActions, getGlobal, withGlobal } from '../../global';
 
 import type {
   ApiContact, ApiError,
 } from '../../api/types';
 import type { MessageList } from '../../types';
 
+import { buildSendMessageCapture, dismissSendMessageCaptureUi } from '../../global/helpers/captureSendMessageContext';
 import { selectCurrentMessageList, selectTabState } from '../../global/selectors';
+import { getCurrentTabId } from '../../util/establishMultitabRole';
 import getReadableErrorText from '../../util/getReadableErrorText';
 import renderText from '../common/helpers/renderText';
 
@@ -47,9 +49,13 @@ const Dialogs: FC<StateProps> = ({ dialogs, currentMessageList }) => {
         return;
       }
 
+      const tabIdCap = getCurrentTabId();
+      const sendMessageCapture = buildSendMessageCapture(getGlobal(), currentMessageList, tabIdCap);
+      dismissSendMessageCaptureUi(sendMessageCapture, currentMessageList, tabIdCap);
       sendMessage({
         contact: contactRequest,
         messageList: currentMessageList,
+        sendMessageCapture,
       });
       closeModal();
     };

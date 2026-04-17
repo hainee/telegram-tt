@@ -1,11 +1,12 @@
 import type { FC } from '../../lib/teact/teact';
 import { memo, useCallback, useRef } from '../../lib/teact/teact';
-import { getActions, withGlobal } from '../../global';
+import { getActions, getGlobal, withGlobal } from '../../global';
 
 import type { ApiChat, ApiChatFullInfo, ApiVideo } from '../../api/types';
 import type { MessageList } from '../../types';
 
 import { getAllowedAttachmentOptions, getCanPostInChat } from '../../global/helpers';
+import { buildSendMessageCapture, dismissSendMessageCaptureUi } from '../../global/helpers/captureSendMessageContext';
 import {
   selectCanScheduleUntilOnline,
   selectChat,
@@ -18,6 +19,7 @@ import {
 } from '../../global/selectors';
 import { IS_TOUCH_ENV } from '../../util/browser/windowEnvironment';
 import buildClassName from '../../util/buildClassName';
+import { getCurrentTabId } from '../../util/establishMultitabRole';
 
 import useHistoryBack from '../../hooks/useHistoryBack';
 import { useIntersectionObserver } from '../../hooks/useIntersectionObserver';
@@ -88,15 +90,27 @@ const GifSearch: FC<OwnProps & StateProps> = ({
 
       if (shouldSchedule) {
         requestCalendar((scheduledAt) => {
+          const tabIdCap = getCurrentTabId();
+          const sendMessageCapture = buildSendMessageCapture(getGlobal(), currentMessageList, tabIdCap);
+          dismissSendMessageCaptureUi(sendMessageCapture, currentMessageList, tabIdCap);
           sendMessage({
             messageList: currentMessageList,
             gif,
             scheduledAt,
             isSilent,
+            sendMessageCapture,
           });
         });
       } else {
-        sendMessage({ messageList: currentMessageList, gif, isSilent });
+        const tabIdCap = getCurrentTabId();
+        const sendMessageCapture = buildSendMessageCapture(getGlobal(), currentMessageList, tabIdCap);
+        dismissSendMessageCaptureUi(sendMessageCapture, currentMessageList, tabIdCap);
+        sendMessage({
+          messageList: currentMessageList,
+          gif,
+          isSilent,
+          sendMessageCapture,
+        });
       }
     }
 

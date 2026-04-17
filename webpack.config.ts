@@ -25,10 +25,15 @@ const {
   APP_ENV = 'production',
   APP_MOCKED_CLIENT = '',
   TT_DEBUG_DIST = '',
+  TT_STABLE_FILENAMES = '',
 } = process.env;
 
 /** 为 Electron/本地调试输出：不压缩、文件名无 contenthash，便于对照源码与设断点 */
 const isDebugDist = TT_DEBUG_DIST === '1' || TT_DEBUG_DIST === 'true';
+/** 正式 dist 仍压缩，但 JS/CSS/资源输出文件名固定（无 hash），便于 zip/本地缓存路径不变 */
+const useStableOutputNames = isDebugDist
+  || TT_STABLE_FILENAMES === '1'
+  || TT_STABLE_FILENAMES === 'true';
 
 const DEFAULT_APP_TITLE = `Telegram${APP_ENV !== 'production' ? ' Beta' : ''}`;
 
@@ -103,9 +108,9 @@ export default function createConfig(
     },
 
     output: {
-      filename: isDebugDist ? '[name].js' : '[name].[contenthash].js',
-      chunkFilename: isDebugDist ? '[name].chunk.js' : '[id].[chunkhash].js',
-      assetModuleFilename: isDebugDist ? '[name][ext]' : '[name].[contenthash][ext]',
+      filename: useStableOutputNames ? '[name].js' : '[name].[contenthash].js',
+      chunkFilename: useStableOutputNames ? '[name].chunk.js' : '[id].[chunkhash].js',
+      assetModuleFilename: useStableOutputNames ? '[name][ext]' : '[name].[contenthash][ext]',
       path: path.resolve(__dirname, isDebugDist ? 'dist_debug' : 'dist'),
       clean: true,
     },
@@ -146,8 +151,8 @@ export default function createConfig(
                   exportLocalsConvention: 'camelCase',
                   auto: true,
                   localIdentName: APP_ENV === 'production' && !isDebugDist
-                  ? '[sha1:hash:base64:8]'
-                  : '[name]__[local]',
+                    ? '[sha1:hash:base64:8]'
+                    : '[name]__[local]',
                 },
               },
             },
@@ -207,8 +212,8 @@ export default function createConfig(
         template: 'src/index.html',
       }),
       new MiniCssExtractPlugin({
-        filename: isDebugDist ? '[name].css' : '[name].[contenthash].css',
-        chunkFilename: isDebugDist ? '[name].chunk.css' : '[name].[chunkhash].css',
+        filename: useStableOutputNames ? '[name].css' : '[name].[contenthash].css',
+        chunkFilename: useStableOutputNames ? '[name].chunk.css' : '[name].[chunkhash].css',
         ignoreOrder: true,
       }),
       new EnvironmentPlugin({
@@ -283,7 +288,7 @@ export default function createConfig(
           },
         },
       },
-      ...((APP_ENV === 'staging' || isDebugDist) && {
+      ...((APP_ENV === 'staging' || isDebugDist || useStableOutputNames) && {
         chunkIds: 'named',
         moduleIds: 'named',
       }),

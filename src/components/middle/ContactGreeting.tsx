@@ -2,7 +2,7 @@ import type { FC } from '../../lib/teact/teact';
 import {
   memo, useEffect, useMemo, useRef,
 } from '../../lib/teact/teact';
-import { getActions, withGlobal } from '../../global';
+import { getActions, getGlobal, withGlobal } from '../../global';
 
 import type {
   ApiBusinessIntro, ApiSticker, ApiUpdateConnectionStateType, ApiUser,
@@ -10,6 +10,7 @@ import type {
 import type { MessageList } from '../../types';
 
 import { getUserFullName } from '../../global/helpers';
+import { buildSendMessageCapture, dismissSendMessageCaptureUi } from '../../global/helpers/captureSendMessageContext';
 import {
   selectChat,
   selectChatLastMessage,
@@ -17,6 +18,7 @@ import {
   selectUser,
   selectUserFullInfo,
 } from '../../global/selectors';
+import { getCurrentTabId } from '../../util/establishMultitabRole';
 
 import useLastCallback from '../../hooks/useLastCallback';
 import useOldLang from '../../hooks/useOldLang';
@@ -83,12 +85,16 @@ const ContactGreeting: FC<OwnProps & StateProps> = ({
       return;
     }
 
+    const tabIdCap = getCurrentTabId();
+    const sendMessageCapture = buildSendMessageCapture(getGlobal(), currentMessageList, tabIdCap);
+    dismissSendMessageCaptureUi(sendMessageCapture, currentMessageList, tabIdCap);
     sendMessage({
       sticker: {
         ...sticker!,
         isPreloadedGlobally: true,
       },
       messageList: currentMessageList,
+      sendMessageCapture,
     });
   });
 

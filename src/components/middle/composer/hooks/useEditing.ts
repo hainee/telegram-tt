@@ -9,6 +9,7 @@ import { ApiMessageEntityTypes } from '../../../../api/types';
 import { EDITABLE_INPUT_CSS_SELECTOR } from '../../../../config';
 import { requestMeasure, requestNextMutation } from '../../../../lib/fasterdom/fasterdom';
 import { hasMessageMedia } from '../../../../global/helpers';
+import { getCurrentTabId } from '../../../../util/establishMultitabRole';
 import focusEditableElement from '../../../../util/focusEditableElement';
 import parseHtmlAsFormattedText from '../../../../util/parseHtmlAsFormattedText';
 import { getTextWithEntitiesAsHtml } from '../../../common/helpers/renderTextWithEntities';
@@ -35,7 +36,7 @@ const useEditing = (
   editingDraft?: ApiFormattedText,
 ): [VoidFunction, VoidFunction, boolean] => {
   const {
-    editMessage, setEditingDraft, toggleMessageWebPage, openDeleteMessageModal,
+    editMessage, setEditingDraft, toggleMessageWebPage, setEditingId, finishEditing,
   } = getActions();
   const [shouldForceShowEditing, setShouldForceShowEditing] = useState(false);
 
@@ -143,6 +144,7 @@ const useEditing = (
   });
 
   const handleEditCancel = useLastCallback(() => {
+    setEditingId({ messageId: undefined });
     resetComposer();
     restoreNewDraftAfterEditing();
   });
@@ -155,18 +157,17 @@ const useEditing = (
     }
 
     if (!text && !hasMessageMedia(editedMessage)) {
-      openDeleteMessageModal({
-        chatId,
-        messageIds: [editedMessage.id],
-        isSchedule: type === 'scheduled',
-      });
+      handleEditCancel();
       return;
     }
 
+    const messageSnapshot = editedMessage;
+    finishEditing({ tabId: getCurrentTabId() });
     editMessage({
       messageList: { chatId, threadId, type },
       text,
       entities,
+      message: messageSnapshot,
     });
 
     resetComposer();

@@ -2,13 +2,14 @@ import type { FC } from '../../lib/teact/teact';
 import {
   memo, useCallback, useEffect, useMemo, useRef,
 } from '../../lib/teact/teact';
-import { getActions, withGlobal } from '../../global';
+import { getActions, getGlobal, withGlobal } from '../../global';
 
 import type { ApiSticker, ApiStickerSet } from '../../api/types';
 import type { MessageList } from '../../types';
 
 import { EMOJI_SIZE_MODAL, STICKER_SIZE_MODAL, TME_LINK_PREFIX } from '../../config';
 import { getAllowedAttachmentOptions, getCanPostInChat } from '../../global/helpers';
+import { buildSendMessageCapture, dismissSendMessageCaptureUi } from '../../global/helpers/captureSendMessageContext';
 import {
   selectBot,
   selectCanScheduleUntilOnline,
@@ -25,6 +26,7 @@ import {
 } from '../../global/selectors';
 import buildClassName from '../../util/buildClassName';
 import { copyTextToClipboard } from '../../util/clipboard';
+import { getCurrentTabId } from '../../util/establishMultitabRole';
 import renderText from './helpers/renderText';
 
 import useAppLayout from '../../hooks/useAppLayout';
@@ -127,17 +129,28 @@ const StickerSetModal: FC<OwnProps & StateProps> = ({
 
     if (shouldSchedule || isScheduleRequested) {
       requestCalendar((scheduledAt) => {
+        const tabIdCap = getCurrentTabId();
+        const sendMessageCapture = buildSendMessageCapture(getGlobal(), currentMessageList, tabIdCap);
+        dismissSendMessageCaptureUi(sendMessageCapture, currentMessageList, tabIdCap);
         sendMessage({
-          messageList: currentMessageList, sticker, isSilent, scheduledAt,
+          messageList: currentMessageList,
+          sticker,
+          isSilent,
+          scheduledAt,
+          sendMessageCapture,
         });
         onClose();
       });
     } else {
+      const tabIdCap = getCurrentTabId();
+      const sendMessageCapture = buildSendMessageCapture(getGlobal(), currentMessageList, tabIdCap);
+      dismissSendMessageCaptureUi(sendMessageCapture, currentMessageList, tabIdCap);
       sendMessage({
         messageList: currentMessageList,
         sticker,
         isSilent,
         shouldUpdateStickerSetOrder: shouldUpdateStickerSetOrder && isAdded,
+        sendMessageCapture,
       });
       onClose();
     }

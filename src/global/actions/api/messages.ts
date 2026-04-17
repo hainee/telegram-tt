@@ -21,7 +21,7 @@ import type {
 import type { MessageKey } from '../../../util/keys/messageKey';
 import type { RequiredGlobalActions } from '../../index';
 import type {
-  ActionReturnType, GlobalState, TabArgs,
+  ActionReturnType, GlobalState, TabArgs, TabState,
 } from '../../types';
 import { MAIN_THREAD_ID, MESSAGE_DELETED } from '../../../api/types';
 import { LoadMoreDirection } from '../../../types';
@@ -339,7 +339,7 @@ addActionHandler('loadMessagesById', async (global, actions, payload): Promise<v
 });
 
 addActionHandler('sendMessage', async (global, actions, payload): Promise<void> => {
-  const { messageList, tabId = getCurrentTabId() } = payload;
+  const { messageList, tabId = getCurrentTabId(), sendMessageCapture } = payload;
 
   const { storyId, peerId: storyPeerId } = selectCurrentViewedStory(global, tabId);
   const isStoryReply = Boolean(storyId && storyPeerId);
@@ -355,7 +355,7 @@ addActionHandler('sendMessage', async (global, actions, payload): Promise<void> 
     type = 'thread';
   }
 
-  payload = omit(payload, ['tabId']);
+  payload = omit(payload, ['tabId', 'sendMessageCapture']);
 
   if (type === 'scheduled' && !payload.scheduledAt) {
     global = updateTabState(global, {
@@ -367,11 +367,15 @@ addActionHandler('sendMessage', async (global, actions, payload): Promise<void> 
 
   const chat = selectChat(global, chatId!)!;
   const draft = selectDraft(global, chatId!, threadId!);
-  const isForwarding = selectTabState(global, tabId).forwardMessages?.messageIds?.length;
+  const forwardSnapshot = sendMessageCapture?.forwardInfo ?? selectTabState(global, tabId).forwardMessages;
+  const isForwarding = Boolean(forwardSnapshot?.messageIds?.length);
 
-  const draftReplyInfo = !isForwarding && !isStoryReply ? draft?.replyInfo : undefined;
-  const draftSuggestedPostInfo = !isForwarding && !isStoryReply
-    ? draft?.suggestedPostInfo : undefined;
+  const draftReplyInfo = sendMessageCapture
+    ? (!isForwarding && !isStoryReply ? sendMessageCapture.replyInfo : undefined)
+    : (!isForwarding && !isStoryReply ? draft?.replyInfo : undefined);
+  const draftSuggestedPostInfo = sendMessageCapture
+    ? (!isForwarding && !isStoryReply ? sendMessageCapture.suggestedPostInfo : undefined)
+    : (!isForwarding && !isStoryReply ? draft?.suggestedPostInfo : undefined);
 
   const storyReplyInfo = isStoryReply ? {
     type: 'story',
@@ -575,7 +579,7 @@ addActionHandler('sendMessage', async (global, actions, payload): Promise<void> 
     }
   }
   if (isForwarding) {
-    const localForwards = await executeForwardMessages(global, params, tabId);
+    const localForwards = await executeForwardMessages(global, params, tabId, forwardSnapshot);
     if (localForwards) {
       localMessages.push(...localForwards);
     }
@@ -612,7 +616,12 @@ addActionHandler('sendInviteMessages', async (global, actions, payload): Promise
 
 addActionHandler('editMessage', (global, actions, payload): ActionReturnType => {
   const {
-    messageList, text, entities, attachments, tabId = getCurrentTabId(),
+    messageList,
+    text,
+    entities,
+    attachments,
+    tabId = getCurrentTabId(),
+    message: payloadMessage,
   } = payload;
 
   if (!messageList) {
@@ -633,12 +642,12 @@ addActionHandler('editMessage', (global, actions, payload): ActionReturnType => 
 
   const { chatId, threadId, type: messageListType } = messageList;
   const chat = selectChat(global, chatId);
-  const message = selectEditingMessage(global, chatId, threadId, messageListType);
+  const message = payloadMessage ?? selectEditingMessage(global, chatId, threadId, messageListType);
   if (!chat || !message) {
     return;
   }
 
-  actions.setEditingId({ messageId: undefined, tabId });
+  actions.finishEditing({ tabId });
 
   (async () => {
     await callApi('editMessage', {
@@ -793,6 +802,29 @@ addActionHandler('resetDraftReplyInfo', (global, actions, payload): ActionReturn
   const newDraft: ApiDraft | undefined = !currentDraft?.text ? undefined : {
     ...currentDraft,
     replyInfo: undefined,
+  };
+
+  saveDraft({
+    global, chatId, threadId, draft: newDraft, isLocalOnly: Boolean(newDraft),
+  });
+});
+
+addActionHandler('resetDraftSuggestedPostStrip', (global, actions, payload): ActionReturnType => {
+  const { tabId = getCurrentTabId() } = payload || {};
+  const currentMessageList = selectCurrentMessageList(global, tabId);
+  if (!currentMessageList) {
+    return;
+  }
+  const { chatId, threadId } = currentMessageList;
+
+  const currentDraft = selectDraft(global, chatId, threadId);
+  if (!currentDraft?.suggestedPostInfo) {
+    return;
+  }
+
+  const newDraft: ApiDraft | undefined = (!currentDraft.text && !currentDraft.replyInfo) ? undefined : {
+    ...currentDraft,
+    suggestedPostInfo: undefined,
   };
 
   saveDraft({
@@ -1618,10 +1650,15 @@ addActionHandler('forwardMessages', (global, actions, payload): ActionReturnType
   executeForwardMessages(global, { chat: toChat, isSilent, scheduledAt }, tabId);
 });
 
-async function executeForwardMessages(global: GlobalState, sendParams: SendMessageParams, tabId: number) {
+async function executeForwardMessages(
+  global: GlobalState,
+  sendParams: SendMessageParams,
+  tabId: number,
+  forwardInfoOverride?: TabState['forwardMessages'],
+) {
   const {
     fromChatId, messageIds, toChatId, withMyScore, noAuthors, noCaptions, toThreadId = MAIN_THREAD_ID,
-  } = selectTabState(global, tabId).forwardMessages;
+  } = forwardInfoOverride ?? selectTabState(global, tabId).forwardMessages;
   const { messagePriceInStars, isSilent, scheduledAt } = sendParams;
 
   const isCurrentUserPremium = selectIsCurrentUserPremium(global);

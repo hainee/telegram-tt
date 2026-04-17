@@ -120,6 +120,21 @@ addActionHandler('setEditingId', (global, actions, payload): ActionReturnType =>
   return replaceThreadParam(nextGlobal, chatId, threadId, paramName, messageId);
 });
 
+addActionHandler('finishEditing', (global, actions, payload): ActionReturnType => {
+  const { tabId = getCurrentTabId() } = payload || {};
+  const currentMessageList = selectCurrentMessageList(global, tabId);
+  if (!currentMessageList) {
+    return undefined;
+  }
+
+  const { chatId, threadId, type } = currentMessageList;
+  const paramName = type === 'scheduled' ? 'editingScheduledId' : 'editingId';
+  const draftParamName = type === 'scheduled' ? 'editingScheduledDraft' : 'editingDraft';
+
+  const nextGlobal = replaceThreadParam(global, chatId, threadId, draftParamName, undefined);
+  return replaceThreadParam(nextGlobal, chatId, threadId, paramName, undefined);
+});
+
 addActionHandler('setEditingDraft', (global, actions, payload): ActionReturnType => {
   const {
     text, chatId, threadId, type,

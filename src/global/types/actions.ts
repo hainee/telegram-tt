@@ -111,6 +111,13 @@ import type { TabState } from './tabState';
 
 export type WithTabId = { tabId?: number };
 
+/** Snapshot of reply + forward UI state at send action invocation (see buildSendMessageCapture). */
+export type SendMessageCapture = {
+  replyInfo?: ApiInputMessageReplyInfo;
+  suggestedPostInfo?: ApiInputSuggestedPostInfo;
+  forwardInfo: TabState['forwardMessages'];
+};
+
 export interface ActionPayloads {
   // system
   init: ({
@@ -474,7 +481,9 @@ export interface ActionPayloads {
     onLoaded?: NoneToVoidFunction;
     onError?: NoneToVoidFunction;
   } & WithTabId;
-  sendMessage: Partial<SendMessageParams> & WithTabId;
+  sendMessage: Partial<SendMessageParams> & WithTabId & {
+    sendMessageCapture?: SendMessageCapture;
+  };
   sendMessages: {
     sendParams: SendMessageParams[];
   };
@@ -528,6 +537,8 @@ export interface ActionPayloads {
     text: string;
     attachments?: ApiAttachment[];
     entities?: ApiMessageEntity[];
+    /** When set, used instead of selectEditingMessage (caller already exited edit mode via setEditingId). */
+    message?: ApiMessage;
   } & WithTabId;
   editTodo: {
     chatId: string;
@@ -707,6 +718,11 @@ export interface ActionPayloads {
     /** 若传入则优先用于回填输入框（可为纯文本或与 Api一致的带实体对象） */
     text?: ApiFormattedText | string;
   } & WithTabId;
+  /**
+   * 退出编辑 UI（清空 editingId / editingDraft），与 setEditingId({ messageId: undefined }) 对 global 的修改一致，
+   * 但不走 setEditingId action（避免外层对 setEditingId 的 hook，例如随后再调 editMessage 的场景）。
+   */
+  finishEditing: WithTabId | undefined;
   editLastMessage: WithTabId | undefined;
   saveDraft: {
     chatId: string;
@@ -1032,6 +1048,8 @@ export interface ActionPayloads {
 
   updateDraftReplyInfo: Partial<ApiInputMessageReplyInfo> & WithTabId;
   resetDraftReplyInfo: WithTabId | undefined;
+  /** Strip suggested-post UI from composer draft while keeping text / reply (for post-sendMessageCapture dismiss). */
+  resetDraftSuggestedPostStrip: WithTabId | undefined;
   updateDraftSuggestedPostInfo: Partial<ApiInputSuggestedPostInfo> & WithTabId;
   resetDraftSuggestedPostInfo: WithTabId | undefined;
   initDraftFromSuggestedMessage: {

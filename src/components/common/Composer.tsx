@@ -58,6 +58,7 @@ import {
   getAllowedAttachmentOptions,
   getReactionKey,
   getStoryKey,
+  hasMessageMedia,
   isChatAdmin,
   isChatChannel,
   isChatPublic,
@@ -65,6 +66,7 @@ import {
   isSameReaction,
   isSystemBot,
 } from '../../global/helpers';
+import { buildSendMessageCapture, dismissSendMessageCaptureUi } from '../../global/helpers/captureSendMessageContext';
 import { getChatNotifySettings } from '../../global/helpers/notifications';
 import { getPeerTitle } from '../../global/helpers/peers';
 import {
@@ -115,14 +117,15 @@ import { tryParseDeepLink } from '../../util/deepLinkParser';
 import deleteLastCharacterOutsideSelection from '../../util/deleteLastCharacterOutsideSelection';
 import { processMessageInputForCustomEmoji } from '../../util/emoji/customEmojiManager';
 import { isUserId } from '../../util/entities/ids';
+import { getCurrentTabId } from '../../util/establishMultitabRole';
 import focusEditableElement from '../../util/focusEditableElement';
 import { formatStarsAsIcon } from '../../util/localization/format';
 import { MEMO_EMPTY_ARRAY } from '../../util/memo';
+import { mergeMentionDebugSnapshot } from '../../util/mentionDebug';
 import parseHtmlAsFormattedText from '../../util/parseHtmlAsFormattedText';
 import { insertHtmlInSelection } from '../../util/selection';
 import { getServerTime } from '../../util/serverTime';
 import windowSize from '../../util/windowSize';
-import { mergeMentionDebugSnapshot } from '../../util/mentionDebug';
 import { DEFAULT_MAX_MESSAGE_LENGTH } from '../../limits';
 import applyIosAutoCapitalizationFix from '../middle/composer/helpers/applyIosAutoCapitalizationFix';
 import buildAttachment, { prepareAttachmentsToSend } from '../middle/composer/helpers/buildAttachment';
@@ -462,6 +465,7 @@ const Composer: FC<OwnProps & StateProps> = ({
     closeReactionPicker,
     sendStoryReaction,
     editMessage,
+    finishEditing,
     updateAttachmentSettings,
     saveEffectInDraft,
     setReactionEffect,
@@ -1124,13 +1128,19 @@ const Composer: FC<OwnProps & StateProps> = ({
     isInvertedMedia = text && sendCompressed && sendGrouped ? isInvertedMedia : undefined;
 
     if (editingMessage) {
+      const messageSnapshot = editingMessage;
+      finishEditing({ tabId: getCurrentTabId() });
       editMessage({
         messageList: currentMessageList,
         text,
         entities,
         attachments: prepareAttachmentsToSend(attachmentsToSend, sendCompressed),
+        message: messageSnapshot,
       });
     } else {
+      const tabIdCap = getCurrentTabId();
+      const sendMessageCapture = buildSendMessageCapture(getGlobal(), currentMessageList, tabIdCap);
+      dismissSendMessageCaptureUi(sendMessageCapture, currentMessageList, tabIdCap);
       sendMessage({
         messageList: currentMessageList,
         text,
@@ -1141,6 +1151,7 @@ const Composer: FC<OwnProps & StateProps> = ({
         attachments: prepareAttachmentsToSend(attachmentsToSend, sendCompressed),
         shouldGroupMessages: sendGrouped,
         isInvertedMedia,
+        sendMessageCapture,
       });
     }
 
@@ -1214,6 +1225,9 @@ const Composer: FC<OwnProps & StateProps> = ({
       }
 
       if (!text && !isForwarding) {
+        if (editingMessage && !hasMessageMedia(editingMessage)) {
+          handleEditCancel();
+        }
         return;
       }
 
@@ -1230,6 +1244,9 @@ const Composer: FC<OwnProps & StateProps> = ({
 
         if (areEffectsSupported) saveEffectInDraft({ chatId, threadId, effectId: undefined });
 
+        const tabIdCap = getCurrentTabId();
+        const sendMessageCapture = buildSendMessageCapture(getGlobal(), currentMessageList, tabIdCap);
+        dismissSendMessageCaptureUi(sendMessageCapture, currentMessageList, tabIdCap);
         sendMessage({
           messageList: currentMessageList,
           text,
@@ -1242,6 +1259,7 @@ const Composer: FC<OwnProps & StateProps> = ({
           webPageMediaSize: attachmentSettings.webPageMediaSize,
           webPageUrl: hasWebPagePreview ? webPagePreview.url : undefined,
           isForwarding,
+          sendMessageCapture,
         });
       }
 
@@ -1351,11 +1369,15 @@ const Composer: FC<OwnProps & StateProps> = ({
       const { sendCompressed = false, sendGrouped = false, isInvertedMedia } = args;
       void handleSendAttachments(sendCompressed, sendGrouped, isSilent, scheduledAt, isInvertedMedia);
     } else {
+      const tabIdCap = getCurrentTabId();
+      const sendMessageCapture = buildSendMessageCapture(getGlobal(), messageList, tabIdCap);
+      dismissSendMessageCaptureUi(sendMessageCapture, messageList, tabIdCap);
       sendMessage({
         ...args,
         messageList,
         scheduledAt,
         effectId,
+        sendMessageCapture,
       });
     }
   });
