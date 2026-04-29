@@ -137,6 +137,54 @@ import { selectCurrentLimit } from '../../selectors/limits';
 const TOP_CHAT_MESSAGES_PRELOAD_INTERVAL = 100;
 const INFINITE_LOOP_MARKER = 100;
 
+/** updateAllChats：断线时轮询等待重连，避免一瞬未就绪就放弃 */
+const UPDATE_ALL_CHATS_CONNECTION_POLL_MS = 200;
+const UPDATE_ALL_CHATS_CONNECTION_WAIT_MAX_MS = 120_000;
+
+/** updateAllChats 并发单例：执行中再次调用返回同一 Promise */
+let updateAllChatsPromise: Promise<void> | undefined;
+let updateAllChatsCancel: NoneToVoidFunction | undefined;
+const updateAllChatsCancelPayloads = new Set<{ cancel?: NoneToVoidFunction }>();
+
+function registerUpdateAllChatsCancel(
+  onPayload: { cancel?: NoneToVoidFunction },
+  cancel: NoneToVoidFunction,
+) {
+  onPayload.cancel = cancel;
+  updateAllChatsCancelPayloads.add(onPayload);
+}
+
+async function waitForConnectionAndAuthReady(isCancelled?: () => boolean): Promise<boolean> {
+  const started = Date.now();
+  while (Date.now() - started < UPDATE_ALL_CHATS_CONNECTION_WAIT_MAX_MS) {
+    if (isCancelled?.()) {
+      return false;
+    }
+    const g = getGlobal();
+    if (g.connectionState === 'connectionStateReady' && g.authState === 'authorizationStateReady') {
+      return true;
+    }
+    await pause(UPDATE_ALL_CHATS_CONNECTION_POLL_MS);
+  }
+  return false;
+}
+
+function resetChatListStateForFullResync(listType: ChatListType) {
+  let global = getGlobal();
+  global = replaceChatListLoadingParameters(global, listType, undefined, undefined, undefined);
+  global = {
+    ...global,
+    chats: {
+      ...global.chats,
+      isFullyLoaded: {
+        ...global.chats.isFullyLoaded,
+        [listType]: false,
+      },
+    },
+  };
+  setGlobal(global);
+}
+
 const CHATLIST_LIMIT_ERROR_LIST = new Set([
   'FILTERS_TOO_MUCH',
   'CHATLISTS_TOO_MUCH',
@@ -547,6 +595,91 @@ addActionHandler('loadAllChats', async (global, actions, payload): Promise<void>
 
     global = getGlobal();
   }
+});
+
+addActionHandler('updateAllChats', async (global, actions, payload): Promise<void> => {
+  if (updateAllChatsPromise) {
+    if (updateAllChatsCancel) {
+      registerUpdateAllChatsCancel(payload, updateAllChatsCancel);
+    }
+    return updateAllChatsPromise;
+  }
+
+  const { listType, onProgress } = payload;
+  let isAborted = false;
+  const cancel = () => {
+    isAborted = true;
+  };
+  updateAllChatsCancel = cancel;
+  registerUpdateAllChatsCancel(payload, cancel);
+
+  const run = async () => {
+    try {
+      resetChatListStateForFullResync(listType);
+
+      if (isAborted) {
+        return;
+      }
+
+      let i = 0;
+
+      while (!getGlobal().chats.isFullyLoaded[listType]) {
+        if (isAborted) {
+          return;
+        }
+
+        if (i++ >= INFINITE_LOOP_MARKER) {
+          if (DEBUG) {
+            // eslint-disable-next-line no-console
+            console.error('`actions/updateAllChats`: Infinite loop detected');
+          }
+
+          return;
+        }
+
+        const connectionOk = await waitForConnectionAndAuthReady(() => isAborted);
+        if (isAborted) {
+          return;
+        }
+        if (!connectionOk) {
+          return;
+        }
+
+        const progress = await loadChats(
+          listType,
+          true,
+        );
+
+        if (isAborted) {
+          return;
+        }
+
+        if (!progress) {
+          return;
+        }
+
+        await onProgress?.({
+          loadedCount: progress.loadedCount,
+          totalChatCount: progress.totalChatCount,
+        });
+
+        await pause(500);
+      }
+    } finally {
+      updateAllChatsCancel = undefined;
+      updateAllChatsCancelPayloads.forEach((p) => {
+        p.cancel = undefined;
+      });
+      updateAllChatsCancelPayloads.clear();
+    }
+  };
+
+  const started = run();
+  updateAllChatsPromise = started.finally(() => {
+    updateAllChatsPromise = undefined;
+  });
+
+  return updateAllChatsPromise;
 });
 
 addActionHandler('loadPinnedDialogs', async (global, actions, payload): Promise<void> => {
@@ -3137,11 +3270,19 @@ addActionHandler('requestCollectibleInfo', async (global, actions, payload): Pro
   setGlobal(global);
 });
 
+/** 单批 fetchChats / fetchSavedChats 落库后的进度（用于 updateAllChats 等） */
+export type LoadChatsProgress = {
+  /** 当前 listType 下全局列表中已包含的会话条数 */
+  loadedCount: number;
+  /** 本批请求对应的服务器端列表总数（如 DialogsSlice.count） */
+  totalChatCount: number;
+};
+
 async function loadChats(
   listType: ChatListType,
   isFullDraftSync?: boolean,
   shouldIgnorePagination?: boolean,
-) {
+): Promise<LoadChatsProgress | undefined> {
   let global = getGlobal();
   let lastLocalServiceMessageId = selectLastServiceNotification(global)?.id;
 
@@ -3171,7 +3312,7 @@ async function loadChats(
   });
 
   if (!result) {
-    return;
+    return undefined;
   }
 
   const { chatIds } = result;
@@ -3237,6 +3378,13 @@ async function loadChats(
   }
 
   setGlobal(global);
+
+  const loadedCount = global.chats.listIds[listType]?.length ?? 0;
+
+  return {
+    loadedCount,
+    totalChatCount: result.totalChatCount,
+  };
 }
 
 export async function loadFullChat<T extends GlobalState>(

@@ -206,6 +206,27 @@ import WebPage from './WebPage';
 
 import './Message.scss';
 
+type MessageTranslationSlotProps = {
+  chatId: string;
+  messageId: number;
+  previousLocalId?: number;
+};
+
+const MessageTranslationSlot = memo(({ chatId, messageId, previousLocalId }: MessageTranslationSlotProps) => {
+  const { apiUpdate } = getActions();
+
+  useEffect(() => {
+    apiUpdate({
+      '@type': 'messageDomUpdated',
+      chatId,
+      messageId,
+      previousLocalId,
+    });
+  }, [apiUpdate, chatId, messageId, previousLocalId]);
+
+  return <div className="message-translation-slot" />;
+});
+
 type MessagePositionProperties = {
   isFirstInGroup: boolean;
   isLastInGroup: boolean;
@@ -1799,6 +1820,11 @@ const Message = ({
             </>
           )}
           {renderContent()}
+          <MessageTranslationSlot
+            chatId={chatId}
+            messageId={messageId}
+            previousLocalId={message.previousLocalId}
+          />
           {!isInDocumentGroupNotLast && metaPosition === 'standalone' && !isStoryMention && renderReactionsAndMeta()}
           {canShowActionButton && (
             <div className={buildClassName(

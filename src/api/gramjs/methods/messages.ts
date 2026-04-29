@@ -1040,6 +1040,7 @@ export async function deleteMessages({
   sendApiUpdate({
     '@type': 'deleteMessages',
     ids: messageIds,
+    fromMe: true,
     ...(isChannel && { chatId: chat.id }),
   });
 }
@@ -1122,6 +1123,7 @@ export async function deleteHistory({
   sendApiUpdate({
     '@type': 'deleteHistory',
     chatId: chat.id,
+    fromMe: true,
   });
 }
 

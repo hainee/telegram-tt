@@ -398,6 +398,7 @@ export function updater(update: Update) {
     sendApiUpdate({
       '@type': 'deleteMessages',
       ids: update.messages,
+      fromMe: false,
     });
   } else if (update instanceof GramJs.UpdateDeleteScheduledMessages) {
     sendApiUpdate({
@@ -413,6 +414,7 @@ export function updater(update: Update) {
       '@type': 'deleteMessages',
       ids: update.messages,
       chatId,
+      fromMe: false,
     });
   } else if (update instanceof GramJs.UpdateServiceNotification) {
     if (update.popup) {

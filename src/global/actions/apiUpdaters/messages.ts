@@ -154,11 +154,23 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
             }
           }
 
-          // @perf Wait until scroll animation finishes or simply rely on delivery status update
-          // (which is itself delayed)
+          // Outgoing: defer lastMessage update so scroll/send animation stays smooth.
+          // Incoming: apply immediately so chat list / ordering stays in sync (delayed updates
+          // can be throttled in background tabs and look like missing messages until navigation).
           if (!isLocal) {
-            setTimeout(() => {
-              global = getGlobal();
+            if (message.isOutgoing) {
+              setTimeout(() => {
+                global = getGlobal();
+                if (shouldForceReply) {
+                  actions.updateDraftReplyInfo({
+                    replyToMsgId: id,
+                    tabId,
+                  });
+                }
+                global = updateChatLastMessage(global, chatId, newMessage);
+                setGlobal(global);
+              }, ANIMATION_DELAY);
+            } else {
               if (shouldForceReply) {
                 actions.updateDraftReplyInfo({
                   replyToMsgId: id,
@@ -166,8 +178,7 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
                 });
               }
               global = updateChatLastMessage(global, chatId, newMessage);
-              setGlobal(global);
-            }, ANIMATION_DELAY);
+            }
           }
         } else {
           global = updateChatLastMessage(global, chatId, newMessage);
@@ -1188,11 +1199,11 @@ function updateListedAndViewportIds<T extends GlobalState>(
     }
   }
 
+  global = updateListedIds(global, chatId, MAIN_THREAD_ID, [id]);
+
   if (isUnreadChatNotLoaded) {
     return global;
   }
-
-  global = updateListedIds(global, chatId, MAIN_THREAD_ID, [id]);
 
   Object.values(global.byTabId).forEach(({ id: tabId }) => {
     if (selectIsViewportNewest(global, chatId, MAIN_THREAD_ID, tabId)) {

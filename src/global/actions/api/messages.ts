@@ -703,6 +703,7 @@ addActionHandler('cancelUploadMedia', (global, actions, payload): ActionReturnTy
       '@type': 'deleteMessages',
       ids: [messageId],
       chatId,
+      fromMe: true,
     });
   }
 });

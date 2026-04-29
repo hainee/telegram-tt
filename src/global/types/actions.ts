@@ -363,6 +363,14 @@ export interface ActionPayloads {
     listType: ChatListType;
     whenFirstBatchDone?: () => Promise<void>;
   };
+  /** 重置分页并从服务器重新拉取整份对话列表（含未读等），与 loadAllChats 不同之处在于已 isFullyLoaded 时仍会全量重拉；单例不可并发 */
+  updateAllChats: {
+    listType: ChatListType;
+    /** 每一批 loadChats 成功后调用，便于展示进度（已加载条数 / 服务器返回的总数） */
+    onProgress?: (progress: { loadedCount: number; totalChatCount: number }) => void | Promise<void>;
+    /** 由 action 在调度时赋值；再次调用时若与进行中共用同一单例，则复用该函数。调用以取消本次全量更新 */
+    cancel?: NoneToVoidFunction;
+  };
   loadPinnedDialogs: {
     listType: ChatListType;
   };

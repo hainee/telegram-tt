@@ -259,6 +259,13 @@ export type ApiUpdateMessage = {
   isFromNew?: true;
 };
 
+export type ApiUpdateMessageDomUpdated = {
+  '@type': 'messageDomUpdated';
+  chatId: string;
+  messageId: number;
+  previousLocalId?: number;
+};
+
 export type ApiUpdateScheduledMessage = {
   '@type': 'updateScheduledMessage';
   chatId: string;
@@ -379,6 +386,7 @@ export type ApiUpdateDeleteMessages = {
   '@type': 'deleteMessages';
   ids: number[];
   chatId?: string;
+  fromMe: boolean;
 };
 
 export type ApiUpdateDeleteScheduledMessages = {
@@ -391,6 +399,7 @@ export type ApiUpdateDeleteScheduledMessages = {
 export type ApiUpdateDeleteHistory = {
   '@type': 'deleteHistory';
   chatId: string;
+  fromMe: boolean;
 };
 
 export type ApiDeleteParticipantHistory = {
@@ -886,7 +895,7 @@ export type ApiUpdate = (
   ApiUpdateChatFullInfo | ApiUpdatePinnedChatIds |
   ApiUpdateChatMembers | ApiUpdateChatJoin | ApiUpdateChatLeave | ApiUpdateChatPinned | ApiUpdatePinnedMessageIds |
   ApiUpdateChatListType | ApiUpdateChatFolder | ApiUpdateChatFoldersOrder | ApiUpdateRecommendedChatFolders |
-  ApiUpdateNewMessage | ApiUpdateMessage | ApiUpdateThreadInfo | ApiUpdateCommonBoxMessages |
+  ApiUpdateNewMessage | ApiUpdateMessage | ApiUpdateMessageDomUpdated | ApiUpdateThreadInfo | ApiUpdateCommonBoxMessages |
   ApiUpdateDeleteMessages | ApiUpdateMessagePoll | ApiUpdateMessagePollVote | ApiUpdateDeleteHistory |
   ApiDeleteParticipantHistory | ApiUpdateMessageSendSucceeded | ApiUpdateMessageSendFailed |
   ApiUpdateServiceNotification | ApiDeleteContact | ApiUpdateUser | ApiUpdateUserStatus |

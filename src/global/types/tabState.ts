@@ -146,6 +146,11 @@ export type TabState = {
 
   messageLists: MessageList[];
 
+  /**
+   * 与 `messageLists` 栈顶同步，在 `updateCurrentMessageList` 中更新；供嵌入端通过 `getCurrentChatId()` 读取，避免自行解析 `byTabId`。
+   */
+  currentVisibleChatId?: string;
+
   contentToBeScheduled?: {
     gif?: ApiVideo;
     sticker?: ApiSticker;
