@@ -545,18 +545,173 @@ export async function sendMessage(
   return localMessage ? sendApiMessage(params, localMessage, onProgress) : undefined;
 }
 
-const groupedUploads: Record<string, {
-  expectedTotal: number;
-  singleMediaByIndex: Record<number, GramJs.InputSingleMedia>;
-  localMessages: Record<string, ApiMessage>;
-}> = {};
+type GroupedMediaPart = {
+  attachment: ApiAttachment;
+  randomId: GramJs.long;
+  localMessage: ApiMessage;
+  text: string;
+  entities?: ApiMessageEntity[];
+  onProgress?: ApiOnProgress;
+};
 
-function failGroupedMedia(groupedId: string, errorMessage: string) {
+type UploadedGroupedMediaPart = GroupedMediaPart & {
+  media: GramJs.InputMediaUploadedPhoto | GramJs.InputMediaUploadedDocument;
+};
+
+type GroupedUploadState = {
+  expectedTotal: number;
+  partsByIndex: Record<number, GroupedMediaPart>;
+  localMessages: Record<string, ApiMessage>;
+  isStarted?: boolean;
+  promise: Promise<void>;
+  resolve: NoneToVoidFunction;
+};
+
+const groupedUploads: Record<string, GroupedUploadState> = {};
+
+function getGroupedMediaPartDebug(part: GroupedMediaPart, index: number) {
+  const { attachment, localMessage, randomId, text } = part;
+  const quick = attachment.quick;
+
+  return {
+    index,
+    localId: localMessage.id,
+    chatId: localMessage.chatId,
+    randomId: randomId.toString(),
+    mimeType: attachment.mimeType,
+    size: attachment.size,
+    hasBlobUrl: Boolean(attachment.blobUrl),
+    shouldSendAsFile: attachment.shouldSendAsFile,
+    quick: quick && {
+      width: quick.width,
+      height: quick.height,
+      duration: quick.duration,
+    },
+    textLength: text.length,
+  };
+}
+
+function getGroupedMediaStateDebug(groupedId: string, state: GroupedUploadState) {
+  const indexes = Object.keys(state.partsByIndex).map(Number).sort((a, b) => a - b);
+
+  return {
+    groupedId,
+    expectedTotal: state.expectedTotal,
+    registeredIndexes: indexes,
+    isStarted: Boolean(state.isStarted),
+    localMessages: Object.values(state.localMessages).map((message) => ({
+      localId: message.id,
+      chatId: message.chatId,
+      groupedId: message.groupedId,
+      sendingState: message.sendingState,
+    })),
+    parts: indexes.map((index) => getGroupedMediaPartDebug(state.partsByIndex[index], index)),
+  };
+}
+
+function logGroupedMediaFailure(
+  groupedId: string,
+  stage: string,
+  state: GroupedUploadState,
+  details?: Record<string, unknown>,
+) {
+  // eslint-disable-next-line no-console
+  console.warn('[TT grouped-media] send album failed', {
+    stage,
+    ...getGroupedMediaStateDebug(groupedId, state),
+    ...details,
+  });
+}
+
+async function sendGroupedMediaPartsSeparately({
+  chat,
+  parts,
+  replyInfo,
+  suggestedPostInfo,
+  isSilent,
+  scheduledAt,
+  sendAs,
+  messagePriceInStars,
+}: {
+  chat: ApiChat;
+  parts: UploadedGroupedMediaPart[];
+  replyInfo?: ApiInputReplyInfo;
+  suggestedPostInfo?: ApiInputSuggestedPostInfo;
+  isSilent?: boolean;
+  scheduledAt?: number;
+  sendAs?: ApiPeer;
+  messagePriceInStars?: number;
+}) {
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    const update = await invokeRequest(new GramJs.messages.SendMedia({
+      clearDraft: i === 0 || undefined,
+      peer: buildInputPeer(chat.id, chat.accessHash),
+      media: part.media,
+      message: part.text || DEFAULT_PRIMITIVES.STRING,
+      randomId: part.randomId,
+      entities: part.entities ? part.entities.map(buildMtpMessageEntity) : undefined,
+      replyTo: replyInfo && buildInputReplyTo(replyInfo),
+      silent: isSilent || undefined,
+      scheduleDate: scheduledAt,
+      sendAs: sendAs && buildInputPeer(sendAs.id, sendAs.accessHash),
+      allowPaidStars: messagePriceInStars ? BigInt(messagePriceInStars) : undefined,
+      suggestedPost: i === 0 && suggestedPostInfo ? buildInputSuggestedPost(suggestedPostInfo) : undefined,
+    }), {
+      shouldIgnoreUpdates: true,
+      shouldThrow: true,
+    });
+
+    if (!update) {
+      throw new Error('EMPTY_SEND_MEDIA_UPDATE');
+    }
+
+    handleLocalMessageUpdate(part.localMessage, update);
+  }
+}
+
+function createGroupedUploadState(expectedTotal: number): GroupedUploadState {
+  let resolve: NoneToVoidFunction = () => undefined;
+  const promise = new Promise<void>((res) => {
+    resolve = res;
+  });
+
+  return {
+    expectedTotal,
+    partsByIndex: {},
+    localMessages: {},
+    promise,
+    resolve,
+  };
+}
+
+function failGroupedMedia(
+  groupedId: string,
+  errorMessage: string,
+  details?: {
+    stage?: string;
+    partIndex?: number;
+    error?: unknown;
+    extra?: Record<string, unknown>;
+  },
+) {
   const state = groupedUploads[groupedId];
   if (!state) {
+    // eslint-disable-next-line no-console
+    console.warn('[TT grouped-media] send album failed after state was removed', {
+      groupedId,
+      errorMessage,
+      ...details,
+    });
     return;
   }
   const { localMessages } = state;
+  logGroupedMediaFailure(groupedId, details?.stage || 'unknown', state, {
+    errorMessage,
+    partIndex: details?.partIndex,
+    error: details?.error,
+    extra: details?.extra,
+  });
   delete groupedUploads[groupedId];
   Object.values(localMessages).forEach((localMessage, index) => {
     sendApiUpdate({
@@ -567,6 +722,7 @@ function failGroupedMedia(groupedId: string, errorMessage: string) {
       shouldNotify: index === 0,
     });
   });
+  state.resolve();
 }
 
 function sendGroupedMedia(
@@ -607,11 +763,7 @@ function sendGroupedMedia(
   const mediaIndex = groupedMediaIndex ?? 0;
 
   if (!groupedUploads[groupedId]) {
-    groupedUploads[groupedId] = {
-      expectedTotal,
-      singleMediaByIndex: {},
-      localMessages: {},
-    };
+    groupedUploads[groupedId] = createGroupedUploadState(expectedTotal);
   } else if (groupedUploads[groupedId].expectedTotal !== expectedTotal) {
     if (DEBUG) {
       // eslint-disable-next-line no-console
@@ -619,73 +771,90 @@ function sendGroupedMedia(
     }
   }
 
-  groupedUploads[groupedId].localMessages[randomId.toString()] = localMessage;
+  const state = groupedUploads[groupedId];
+  state.localMessages[randomId.toString()] = localMessage;
+  state.partsByIndex[mediaIndex] = {
+    attachment,
+    randomId,
+    localMessage,
+    text,
+    entities,
+    onProgress,
+  };
 
-  if (!attachment.blobUrl || attachment.size <= 0) {
-    const prevMediaQueue = mediaQueue;
-    mediaQueue = (async () => {
-      await prevMediaQueue;
-      failGroupedMedia(groupedId, 'MEDIA_EMPTY');
-    })();
-    return mediaQueue;
+  if (state.isStarted) {
+    return state.promise;
   }
+
+  for (let i = 0; i < state.expectedTotal; i++) {
+    if (!state.partsByIndex[i]) {
+      return state.promise;
+    }
+  }
+
+  state.isStarted = true;
 
   const prevMediaQueue = mediaQueue;
   mediaQueue = (async () => {
-    // Serialize album parts: parallel messages.UploadMedia for the same peer often yields MEDIA_EMPTY.
+    // Process the album only after all local parts are registered; otherwise an early
+    // upload failure can delete the group while later parts recreate it and stay pending.
     await prevMediaQueue;
 
-    let media: GramJs.InputMediaUploadedPhoto | GramJs.InputMediaUploadedDocument | undefined;
-    try {
-      media = await uploadMedia(localMessage, attachment, onProgress!);
-    } catch (err) {
-      if (DEBUG) {
-        // eslint-disable-next-line no-console
-        console.warn(err);
-      }
-      const errMsg = err instanceof RPCError ? err.errorMessage : 'UPLOAD_FAILED';
-      failGroupedMedia(groupedId, errMsg);
+    const stateAfterQueue = groupedUploads[groupedId];
+    if (!stateAfterQueue) {
+      // eslint-disable-next-line no-console
+      console.warn('[TT grouped-media] queued album task found no state', { groupedId });
+      state.resolve();
       return;
     }
 
-    const messageMediaResult = await fetchInputMedia(
-      buildInputPeer(chat.id, chat.accessHash),
-      media,
-    );
+    const { localMessages, partsByIndex, expectedTotal: albumSize } = stateAfterQueue;
+    const multiMedia: GramJs.InputSingleMedia[] = [];
+    const uploadedParts: UploadedGroupedMediaPart[] = [];
 
-    const stateAfterAwait = groupedUploads[groupedId];
-    if (!stateAfterAwait) {
-      return;
-    }
-
-    if (!messageMediaResult) {
-      failGroupedMedia(groupedId, 'MEDIA_EMPTY');
-      return;
-    }
-
-    stateAfterAwait.singleMediaByIndex[mediaIndex] = new GramJs.InputSingleMedia({
-      media: messageMediaResult,
-      randomId,
-      message: text || DEFAULT_PRIMITIVES.STRING,
-      entities: entities ? entities.map(buildMtpMessageEntity) : undefined,
-    });
-
-    const state = groupedUploads[groupedId];
-    if (!state) {
-      return;
-    }
-
-    for (let i = 0; i < state.expectedTotal; i++) {
-      if (!state.singleMediaByIndex[i]) {
+    for (let i = 0; i < albumSize; i++) {
+      const part = partsByIndex[i];
+      if (!part?.attachment.blobUrl || part.attachment.size <= 0) {
+        failGroupedMedia(groupedId, 'MEDIA_EMPTY', {
+          stage: 'pre-upload-validation',
+          partIndex: i,
+          extra: {
+            part: part && getGroupedMediaPartDebug(part, i),
+          },
+        });
         return;
       }
-    }
 
-    const { singleMediaByIndex, localMessages, expectedTotal: albumSize } = state;
-    delete groupedUploads[groupedId];
-    const multiMedia: GramJs.InputSingleMedia[] = [];
-    for (let i = 0; i < albumSize; i++) {
-      multiMedia.push(singleMediaByIndex[i]);
+      let media: GramJs.InputMediaUploadedPhoto | GramJs.InputMediaUploadedDocument | undefined;
+      try {
+        media = await uploadMedia(part.localMessage, part.attachment, part.onProgress!);
+      } catch (err) {
+        if (DEBUG) {
+          // eslint-disable-next-line no-console
+          console.warn(err);
+        }
+        const errMsg = err instanceof RPCError ? err.errorMessage : 'UPLOAD_FAILED';
+        failGroupedMedia(groupedId, errMsg, {
+          stage: 'uploadMedia',
+          partIndex: i,
+          error: err,
+          extra: {
+            part: getGroupedMediaPartDebug(part, i),
+          },
+        });
+        return;
+      }
+
+      uploadedParts.push({ ...part, media });
+      multiMedia.push(new GramJs.InputSingleMedia({
+        // SendMultiMedia expects fresh uploaded media here. Re-uploading through
+        // messages.UploadMedia and then passing InputMediaPhoto/Document can be
+        // accepted by UploadMedia but rejected by SendMultiMedia with MEDIA_EMPTY.
+        media,
+        randomId: part.randomId,
+        message: part.text || DEFAULT_PRIMITIVES.STRING,
+        entities: part.entities ? part.entities.map(buildMtpMessageEntity) : undefined,
+      }));
     }
     const count = multiMedia.length;
 
@@ -711,61 +880,64 @@ function sendGroupedMedia(
         console.warn(error);
       }
       const errMsg = error instanceof RPCError ? error.errorMessage : (error?.message || 'UNKNOWN');
-      Object.values(localMessages).forEach((lm, index) => {
-        sendApiUpdate({
-          '@type': lm.isScheduled ? 'updateScheduledMessageSendFailed' : 'updateMessageSendFailed',
-          chatId: lm.chatId,
-          localId: lm.id,
-          error: errMsg,
-          shouldNotify: index === 0,
-        });
+      if (errMsg === 'MEDIA_INVALID' || errMsg === 'MEDIA_EMPTY') {
+        try {
+          // eslint-disable-next-line no-console
+          console.warn('[TT grouped-media] SendMultiMedia rejected album, fallback to SendMedia per item', {
+            groupedId,
+            errorMessage: errMsg,
+            multiMediaClasses: multiMedia.map((item) => item.media.constructor.name),
+            parts: uploadedParts.map((part, index) => getGroupedMediaPartDebug(part, index)),
+          });
+          await sendGroupedMediaPartsSeparately({
+            chat,
+            parts: uploadedParts,
+            replyInfo,
+            suggestedPostInfo,
+            isSilent,
+            scheduledAt,
+            sendAs,
+            messagePriceInStars,
+          });
+          delete groupedUploads[groupedId];
+          state.resolve();
+          return;
+        } catch (fallbackError) {
+          // eslint-disable-next-line no-console
+          console.warn('[TT grouped-media] SendMedia fallback failed', {
+            groupedId,
+            error: fallbackError,
+          });
+        }
+      }
+      failGroupedMedia(groupedId, errMsg, {
+        stage: 'messages.SendMultiMedia',
+        error,
+        extra: {
+          multiMediaClasses: multiMedia.map((item) => item.media.constructor.name),
+          count,
+        },
       });
       return;
     }
 
-    if (update) handleMultipleLocalMessagesUpdate(localMessages, update);
+    if (!update) {
+      failGroupedMedia(groupedId, 'UNKNOWN', {
+        stage: 'messages.SendMultiMedia-empty-update',
+        extra: {
+          multiMediaClasses: multiMedia.map((item) => item.media.constructor.name),
+          count,
+        },
+      });
+      return;
+    }
+
+    delete groupedUploads[groupedId];
+    handleMultipleLocalMessagesUpdate(localMessages, update);
+    state.resolve();
   })();
 
-  return mediaQueue;
-}
-
-async function fetchInputMedia(
-  peer: GramJs.TypeInputPeer,
-  uploadedMedia: GramJs.InputMediaUploadedPhoto | GramJs.InputMediaUploadedDocument,
-) {
-  const messageMedia = await invokeRequest(new GramJs.messages.UploadMedia({
-    peer,
-    media: uploadedMedia,
-  }));
-  const isSpoiler = uploadedMedia.spoiler;
-
-  if ((
-    messageMedia instanceof GramJs.MessageMediaPhoto
-    && messageMedia.photo
-    && messageMedia.photo instanceof GramJs.Photo)
-  ) {
-    const { photo: { id, accessHash, fileReference } } = messageMedia;
-
-    return new GramJs.InputMediaPhoto({
-      id: new GramJs.InputPhoto({ id, accessHash, fileReference }),
-      spoiler: isSpoiler,
-    });
-  }
-
-  if ((
-    messageMedia instanceof GramJs.MessageMediaDocument
-    && messageMedia.document
-    && messageMedia.document instanceof GramJs.Document)
-  ) {
-    const { document: { id, accessHash, fileReference } } = messageMedia;
-
-    return new GramJs.InputMediaDocument({
-      id: new GramJs.InputDocument({ id, accessHash, fileReference }),
-      spoiler: isSpoiler,
-    });
-  }
-
-  return undefined;
+  return state.promise;
 }
 
 export async function editMessage({
