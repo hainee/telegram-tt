@@ -264,6 +264,9 @@ export type ApiUpdateMessageDomUpdated = {
   chatId: string;
   messageId: number;
   previousLocalId?: number;
+  threadId?: ThreadId;
+  isAction?: true;
+  isContentChanged?: true;
 };
 
 export type ApiUpdateScheduledMessage = {

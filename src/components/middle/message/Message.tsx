@@ -209,20 +209,35 @@ import './Message.scss';
 type MessageTranslationSlotProps = {
   chatId: string;
   messageId: number;
+  threadId: ThreadId;
   previousLocalId?: number;
+  contentSignature?: string;
 };
 
-const MessageTranslationSlot = memo(({ chatId, messageId, previousLocalId }: MessageTranslationSlotProps) => {
+const MessageTranslationSlot = memo(({
+  chatId,
+  messageId,
+  threadId,
+  previousLocalId,
+  contentSignature,
+}: MessageTranslationSlotProps) => {
   const { apiUpdate } = getActions();
+  const lastContentSignatureRef = useRef<string>();
 
   useEffect(() => {
+    const isContentChanged = lastContentSignatureRef.current !== undefined
+      && lastContentSignatureRef.current !== contentSignature;
+    lastContentSignatureRef.current = contentSignature;
+
     apiUpdate({
       '@type': 'messageDomUpdated',
       chatId,
       messageId,
+      threadId,
       previousLocalId,
+      isContentChanged: isContentChanged || undefined,
     });
-  }, [apiUpdate, chatId, messageId, previousLocalId]);
+  }, [apiUpdate, chatId, contentSignature, messageId, previousLocalId, threadId]);
 
   return <div className="message-translation-slot" />;
 });
@@ -1823,7 +1838,9 @@ const Message = ({
           <MessageTranslationSlot
             chatId={chatId}
             messageId={messageId}
+            threadId={threadId}
             previousLocalId={message.previousLocalId}
+            contentSignature={text?.text}
           />
           {!isInDocumentGroupNotLast && metaPosition === 'standalone' && !isStoryMention && renderReactionsAndMeta()}
           {canShowActionButton && (

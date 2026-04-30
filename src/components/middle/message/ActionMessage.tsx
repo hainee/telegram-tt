@@ -131,6 +131,7 @@ const ActionMessage = ({
   observeIntersectionForPlaying,
 }: OwnProps & StateProps) => {
   const {
+    apiUpdate,
     requestConfetti,
     openMediaViewer,
     getReceipt,
@@ -150,6 +151,21 @@ const ActionMessage = ({
   const { id, chatId } = message;
   const action = message.content.action!;
   const isLocal = isLocalMessageId(id);
+
+  useEffect(() => {
+    if (!ref.current || (isInsideTopic && action.type === 'topicCreate') || action.type === 'phoneCall') {
+      return;
+    }
+
+    apiUpdate({
+      '@type': 'messageDomUpdated',
+      chatId,
+      messageId: id,
+      threadId,
+      previousLocalId: message.previousLocalId,
+      isAction: true,
+    });
+  }, [action.type, apiUpdate, chatId, id, isInsideTopic, message.previousLocalId, threadId]);
 
   const isTextHidden = HIDDEN_TEXT_ACTIONS.has(action.type);
   const isSingleLine = SINGLE_LINE_ACTIONS.has(action.type);
