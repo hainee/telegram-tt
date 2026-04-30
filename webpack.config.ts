@@ -26,6 +26,7 @@ const {
   APP_MOCKED_CLIENT = '',
   TT_DEBUG_DIST = '',
   TT_STABLE_FILENAMES = '',
+  TT_PRO_DIST = '',
 } = process.env;
 
 /** 为 Electron/本地调试输出：不压缩、文件名无 contenthash，便于对照源码与设断点 */
@@ -34,6 +35,9 @@ const isDebugDist = TT_DEBUG_DIST === '1' || TT_DEBUG_DIST === 'true';
 const useStableOutputNames = isDebugDist
   || TT_STABLE_FILENAMES === '1'
   || TT_STABLE_FILENAMES === 'true';
+
+/** 精简产物 dist_pro：输出到 dist_pro；无 source map；tgs 等资源仍为独立文件（asset/resource） */
+const isProDist = TT_PRO_DIST === '1' || TT_PRO_DIST === 'true';
 
 const DEFAULT_APP_TITLE = `Telegram${APP_ENV !== 'production' ? ' Beta' : ''}`;
 
@@ -111,7 +115,7 @@ export default function createConfig(
       filename: useStableOutputNames ? '[name].js' : '[name].[contenthash].js',
       chunkFilename: useStableOutputNames ? '[name].chunk.js' : '[id].[chunkhash].js',
       assetModuleFilename: useStableOutputNames ? '[name][ext]' : '[name].[contenthash][ext]',
-      path: path.resolve(__dirname, isDebugDist ? 'dist_debug' : 'dist'),
+      path: path.resolve(__dirname, isDebugDist ? 'dist_debug' : isProDist ? 'dist_pro' : 'dist'),
       clean: true,
     },
 
@@ -276,7 +280,7 @@ export default function createConfig(
       }),
     ],
 
-    devtool: 'source-map',
+    devtool: isProDist ? false : 'source-map',
 
     optimization: {
       minimize: isDebugDist ? false : mode === 'production',

@@ -44,6 +44,7 @@ import { IS_IOS } from '../../../util/browser/windowEnvironment';
 import { copyTextToClipboardFromPromise } from '../../../util/clipboard';
 import { isDeepLink } from '../../../util/deepLinkParser';
 import { getCurrentTabId } from '../../../util/establishMultitabRole';
+import getReadableErrorText from '../../../util/getReadableErrorText';
 import {
   areSortedArraysIntersecting,
   buildCollectionByKey,
@@ -493,6 +494,36 @@ addActionHandler('sendMessage', async (global, actions, payload): Promise<void> 
     } = params;
     const byType = splitAttachmentsByType(attachments!);
 
+    for (const group of byType) {
+      for (const albumBatch of split(group, MAX_MEDIA_FILES_FOR_ALBUM)) {
+        for (const att of albumBatch) {
+          if (!att.blobUrl || att.size <= 0) {
+            actions.showNotification({
+              message: getReadableErrorText({ message: 'MEDIA_EMPTY', hasErrorKey: true })
+                || 'The provided media object is invalid',
+              tabId,
+            });
+            return;
+          }
+          if (SUPPORTED_VIDEO_CONTENT_TYPES.has(att.mimeType)) {
+            if (
+              att.shouldSendAsFile
+              || !att.quick
+              || att.quick.duration === undefined
+              || !Number.isFinite(att.quick.duration)
+              || att.quick.duration <= 0
+            ) {
+              actions.showNotification({
+                message: getTranslationFn()('ComposerAlbumVideoIncompatible'),
+                tabId,
+              });
+              return;
+            }
+          }
+        }
+      }
+    }
+
     let hasSentCaption = false;
     for (let groupIndex = 0; groupIndex < byType.length; groupIndex++) {
       const group = byType[groupIndex];
@@ -504,7 +535,9 @@ addActionHandler('sendMessage', async (global, actions, payload): Promise<void> 
         const isLast = i === groupedAttachments.length - 1 && groupIndex === byType.length - 1;
 
         if (group[0].quick && !group[0].shouldSendAsFile) {
-          const [firstAttachment, ...restAttachments] = groupedAttachments[i];
+          const albumBatch = groupedAttachments[i];
+          const albumLen = albumBatch.length;
+          const [firstAttachment, ...restAttachments] = albumBatch;
 
           let sendParams: SendMessageParams = {
             ...commonParams,
@@ -512,29 +545,41 @@ addActionHandler('sendMessage', async (global, actions, payload): Promise<void> 
             entities: isFirst && !hasSentCaption ? entities : undefined,
             attachment: firstAttachment,
             groupedId: restAttachments.length > 0 ? groupedId : undefined,
+            groupedMediaTotal: restAttachments.length > 0 ? albumLen : undefined,
+            groupedMediaIndex: restAttachments.length > 0 ? 0 : undefined,
             wasDrafted: Boolean(draft),
           };
           await sendMessageOrReduceLocal(global, sendParams, localMessages);
 
           hasSentCaption = true;
 
+          let partIndex = 1;
           for (const attachment of restAttachments) {
             sendParams = {
               ...commonParams,
               attachment,
               groupedId,
+              groupedMediaTotal: albumLen,
+              groupedMediaIndex: partIndex,
             };
+            partIndex++;
             await sendMessageOrReduceLocal(global, sendParams, localMessages);
           }
         } else {
-          const firstAttachments = groupedAttachments[i].slice(0, -1);
-          const lastAttachment = groupedAttachments[i][groupedAttachments[i].length - 1];
+          const albumBatch = groupedAttachments[i];
+          const albumLen = albumBatch.length;
+          const firstAttachments = albumBatch.slice(0, -1);
+          const lastAttachment = albumBatch[albumBatch.length - 1];
+          let partIndex = 0;
           for (const attachment of firstAttachments) {
             const sendParams = {
               ...commonParams,
               attachment,
               groupedId,
+              groupedMediaTotal: albumLen,
+              groupedMediaIndex: partIndex,
             };
+            partIndex++;
             await sendMessageOrReduceLocal(global, sendParams, localMessages);
           }
 
@@ -544,6 +589,8 @@ addActionHandler('sendMessage', async (global, actions, payload): Promise<void> 
             entities: isLast && !hasSentCaption ? entities : undefined,
             attachment: lastAttachment,
             groupedId: firstAttachments.length > 0 ? groupedId : undefined,
+            groupedMediaTotal: firstAttachments.length > 0 ? albumLen : undefined,
+            groupedMediaIndex: firstAttachments.length > 0 ? partIndex : undefined,
             wasDrafted: Boolean(draft),
           };
           await sendMessageOrReduceLocal(global, sendParams, localMessages);

@@ -13,6 +13,7 @@ import { SERVICE_NOTIFICATIONS_USER_ID } from '../../../config';
 import { areDeepEqual } from '../../../util/areDeepEqual';
 import { isUserId } from '../../../util/entities/ids';
 import { getCurrentTabId } from '../../../util/establishMultitabRole';
+import getReadableErrorText from '../../../util/getReadableErrorText';
 import {
   buildCollectionByKey, omit, pickTruthy, unique,
 } from '../../../util/iteratees';
@@ -896,7 +897,8 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
     }
 
     case 'updateMessageSendFailed': {
-      const { chatId, localId, error } = update;
+      const { chatId, localId, error, shouldNotify: shouldNotifyFlag } = update;
+      const shouldNotify = shouldNotifyFlag !== false;
 
       if (error.match(/CHAT_SEND_.+?FORBIDDEN/)) {
         Object.values(global.byTabId).forEach(({ id: tabId }) => {
@@ -904,13 +906,40 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
         });
       }
 
-      global = updateChatMessage(global, chatId, localId, { sendingState: 'messageSendingStateFailed' });
+      const failedMessage = selectChatMessage(global, chatId, localId);
+      const albumGroupedId = failedMessage?.groupedId;
+
+      if (albumGroupedId) {
+        const byId = selectChatMessages(global, chatId);
+        if (byId) {
+          Object.values(byId).forEach((message) => {
+            if (message?.groupedId === albumGroupedId && isLocalMessageId(message.id)) {
+              global = updateChatMessage(global, chatId, message.id, {
+                sendingState: 'messageSendingStateFailed',
+              });
+            }
+          });
+        }
+      } else {
+        global = updateChatMessage(global, chatId, localId, { sendingState: 'messageSendingStateFailed' });
+      }
+
+      if (!error.match(/CHAT_SEND_.+?FORBIDDEN/) && shouldNotify) {
+        const readable = getReadableErrorText({ message: error, hasErrorKey: true });
+        if (readable) {
+          Object.values(global.byTabId).forEach(({ id: tabId }) => {
+            actions.showNotification({ message: readable, tabId });
+          });
+        }
+      }
+
       setGlobal(global);
       break;
     }
 
     case 'updateScheduledMessageSendFailed': {
-      const { chatId, localId, error } = update;
+      const { chatId, localId, error, shouldNotify: shouldNotifyFlag } = update;
+      const shouldNotify = shouldNotifyFlag !== false;
 
       if (error.match(/CHAT_SEND_.+?FORBIDDEN/)) {
         Object.values(global.byTabId).forEach(({ id: tabId }) => {
@@ -918,7 +947,35 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
         });
       }
 
-      global = updateScheduledMessage(global, chatId, localId, { sendingState: 'messageSendingStateFailed' });
+      const failedScheduled = selectScheduledMessage(global, chatId, localId);
+      const scheduledAlbumGroupedId = failedScheduled?.groupedId;
+
+      if (scheduledAlbumGroupedId) {
+        const byId = selectChatScheduledMessages(global, chatId);
+        if (byId) {
+          Object.values(byId).forEach((message) => {
+            if (message?.groupedId === scheduledAlbumGroupedId && isLocalMessageId(message.id)) {
+              global = updateScheduledMessage(global, chatId, message.id, {
+                sendingState: 'messageSendingStateFailed',
+              });
+            }
+          });
+        }
+      } else {
+        global = updateScheduledMessage(global, chatId, localId, {
+          sendingState: 'messageSendingStateFailed',
+        });
+      }
+
+      if (!error.match(/CHAT_SEND_.+?FORBIDDEN/) && shouldNotify) {
+        const readable = getReadableErrorText({ message: error, hasErrorKey: true });
+        if (readable) {
+          Object.values(global.byTabId).forEach(({ id: tabId }) => {
+            actions.showNotification({ message: readable, tabId });
+          });
+        }
+      }
+
       setGlobal(global);
       break;
     }

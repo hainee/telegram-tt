@@ -342,6 +342,8 @@ export type ApiUpdateMessageSendFailed = {
   chatId: string;
   localId: number;
   error: string;
+  /** When false, skip user-visible error toast (e.g. album: only first fragment notifies). */
+  shouldNotify?: boolean;
 };
 
 export type ApiUpdateScheduledMessageSendFailed = {
@@ -349,6 +351,7 @@ export type ApiUpdateScheduledMessageSendFailed = {
   chatId: string;
   localId: number;
   error: string;
+  shouldNotify?: boolean;
 };
 
 export type ApiUpdateCommonBoxMessages = {
@@ -895,7 +898,8 @@ export type ApiUpdate = (
   ApiUpdateChatFullInfo | ApiUpdatePinnedChatIds |
   ApiUpdateChatMembers | ApiUpdateChatJoin | ApiUpdateChatLeave | ApiUpdateChatPinned | ApiUpdatePinnedMessageIds |
   ApiUpdateChatListType | ApiUpdateChatFolder | ApiUpdateChatFoldersOrder | ApiUpdateRecommendedChatFolders |
-  ApiUpdateNewMessage | ApiUpdateMessage | ApiUpdateMessageDomUpdated | ApiUpdateThreadInfo | ApiUpdateCommonBoxMessages |
+  ApiUpdateNewMessage | ApiUpdateMessage | ApiUpdateMessageDomUpdated |
+  ApiUpdateThreadInfo | ApiUpdateCommonBoxMessages |
   ApiUpdateDeleteMessages | ApiUpdateMessagePoll | ApiUpdateMessagePollVote | ApiUpdateDeleteHistory |
   ApiDeleteParticipantHistory | ApiUpdateMessageSendSucceeded | ApiUpdateMessageSendFailed |
   ApiUpdateServiceNotification | ApiDeleteContact | ApiUpdateUser | ApiUpdateUserStatus |

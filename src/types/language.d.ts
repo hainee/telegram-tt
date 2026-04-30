@@ -965,6 +965,7 @@ export interface LangPair {
   'AttachPhoto': undefined;
   'AttachGif': undefined;
   'AttachVideo': undefined;
+  'ComposerAlbumVideoIncompatible': undefined;
   'AttachSticker': undefined;
   'AttachMusic': undefined;
   'AttachContact': undefined;

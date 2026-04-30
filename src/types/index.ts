@@ -724,6 +724,12 @@ export type SendMessageParams = {
   isSilent?: boolean;
   scheduledAt?: number;
   groupedId?: string;
+  /**
+   * Album send: total items sharing this groupedId (must match for all parts).
+   * Part index in build is groupedMediaIndex in 0..groupedMediaTotal-1.
+   */
+  groupedMediaTotal?: number;
+  groupedMediaIndex?: number;
   noWebPage?: boolean;
   sendAs?: ApiPeer;
   shouldGroupMessages?: boolean;

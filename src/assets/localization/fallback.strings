@@ -1116,6 +1116,7 @@
 "AttachPhoto" = "Photo";
 "AttachGif" = "GIF";
 "AttachVideo" = "Video";
+"ComposerAlbumVideoIncompatible" = "This video can't be sent in an album with photos. The file may use a codec your browser can't read (try H.264 MP4), have unusual dimensions, or missing metadata. Send the video separately or re-convert the file.";
 "AttachSticker" = "Sticker";
 "AttachMusic" = "Music";
 "AttachContact" = "Contact";
