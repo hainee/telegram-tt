@@ -31,6 +31,7 @@ import {
   getMessageText,
   isActionMessage,
   isMessageLocal,
+  mergeForwardInfoPreservingFromMessageId,
 } from '../../helpers';
 import { getMessageReplyInfo, getStoryReplyInfo } from '../../helpers/replies';
 import {
@@ -489,6 +490,11 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
       global = updateChatMessage(global, chatId, message.id, {
         ...currentMessage,
         ...message,
+        forwardInfo: mergeForwardInfoPreservingFromMessageId(
+          currentMessage?.forwardInfo,
+          message.forwardInfo,
+          global.currentUserId,
+        ),
         previousLocalId: localId,
         isDeleting: undefined,
       });
@@ -567,6 +573,11 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
       global = updateScheduledMessage(global, chatId, message.id, {
         ...currentMessage,
         ...message,
+        forwardInfo: mergeForwardInfoPreservingFromMessageId(
+          currentMessage?.forwardInfo,
+          message.forwardInfo,
+          global.currentUserId,
+        ),
         previousLocalId: localId,
         isDeleting: undefined,
       });
@@ -1176,7 +1187,19 @@ export function updateWithLocalMedia(
     }
   }
 
-  const newMessage = currentMessage ? { ...currentMessage, ...messageUpdate } : messageUpdate;
+  let safeMessageUpdate = messageUpdate;
+  if (currentMessage && messageUpdate.forwardInfo !== undefined) {
+    safeMessageUpdate = {
+      ...messageUpdate,
+      forwardInfo: mergeForwardInfoPreservingFromMessageId(
+        currentMessage.forwardInfo,
+        messageUpdate.forwardInfo,
+        global.currentUserId,
+      ),
+    };
+  }
+
+  const newMessage = currentMessage ? { ...currentMessage, ...safeMessageUpdate } : messageUpdate;
 
   return isScheduled
     ? updateScheduledMessage(global, chatId, id, newMessage)

@@ -74,7 +74,12 @@ import { type OmitVirtualFields } from './helpers';
 import { buildApiMessageAction } from './messageActions';
 import { buildMessageContent, buildMessageMediaContent, buildMessageTextContent } from './messageContent';
 import { buildApiRestrictionReasons } from './misc';
-import { buildApiPeerColor, buildApiPeerId, getApiChatIdFromMtpPeer } from './peers';
+import {
+  buildApiPeerColor,
+  buildApiPeerId,
+  getApiChatIdFromMtpPeer,
+  isMtpPeerChannel, isMtpPeerChat, isMtpPeerUser,
+} from './peers';
 import { buildMessageReactions } from './reactions';
 
 const LOCAL_MEDIA_UPLOADING_TEMP_ID = 'temp';
@@ -342,6 +347,19 @@ function buildApiMessageForwardInfo(fwdFrom: GramJs.MessageFwdHeader, isChatWith
   const savedFromPeerId = fwdFrom.savedFromPeer && getApiChatIdFromMtpPeer(fwdFrom.savedFromPeer);
   const fromId = fwdFrom.fromId && getApiChatIdFromMtpPeer(fwdFrom.fromId);
 
+  // `from_id` in MessageFwdHeader is the original *author* peer, not necessarily the dialog id.
+  // Using user id here as `fromChatId` breaks e.g. megagroup forwards of own messages (author is self).
+  let fromChatId: string | undefined;
+  if (savedFromPeerId) {
+    fromChatId = savedFromPeerId;
+  } else if (fwdFrom.fromId) {
+    if (isMtpPeerChannel(fwdFrom.fromId) || isMtpPeerChat(fwdFrom.fromId)) {
+      fromChatId = fromId;
+    } else if (isMtpPeerUser(fwdFrom.fromId) && fromId !== undefined && fromId !== currentUserId) {
+      fromChatId = fromId;
+    }
+  }
+
   return {
     date: fwdFrom.date,
     savedDate: fwdFrom.savedDate,
@@ -353,7 +371,7 @@ function buildApiMessageForwardInfo(fwdFrom: GramJs.MessageFwdHeader, isChatWith
     savedFromPeerId,
     isSavedOutgoing: fwdFrom.savedOut,
     fromId,
-    fromChatId: fromId || savedFromPeerId,
+    fromChatId,
     fromMessageId: fwdFrom.savedFromMsgId || fwdFrom.channelPost,
     hiddenUserName: fwdFrom.fromName,
     postAuthorTitle: fwdFrom.postAuthor,

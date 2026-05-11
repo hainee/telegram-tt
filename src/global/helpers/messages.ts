@@ -10,6 +10,7 @@ import type {
 } from '../../api/types';
 import type {
   ApiFormattedText,
+  ApiMessageForwardInfo,
   ApiPoll, ApiReplyInfo, ApiWebPage, MediaContainer, StatefulMediaContent,
 } from '../../api/types/messages';
 import type { ThreadId } from '../../types';
@@ -510,6 +511,45 @@ export function getSuggestedChangesActionText(
     withNodes: true,
     withMarkdown: true,
   });
+}
+
+/**
+ * MTProto `MessageFwdHeader` often omits a source message id for non-channel forwards;
+ * `buildLocalForwardedMessage` sets `fromMessageId` / `fromChatId` from the source message, but
+ * server-built `forwardInfo` may omit id or mis-derive `fromChatId` from `from_id` (author peer).
+ *
+ * Preserve local fields when merging the same pending outgoing (`localId` → real id).
+ */
+export function mergeForwardInfoPreservingFromMessageId(
+  localForward: ApiMessageForwardInfo | undefined,
+  serverForward: ApiMessageForwardInfo | undefined,
+  currentUserId?: string,
+): ApiMessageForwardInfo | undefined {
+  if (!serverForward) {
+    return localForward;
+  }
+
+  const selfId = currentUserId;
+  let merged: ApiMessageForwardInfo = { ...serverForward };
+
+  if (merged.fromMessageId === undefined && localForward?.fromMessageId !== undefined) {
+    merged = { ...merged, fromMessageId: localForward.fromMessageId };
+  }
+
+  const serverFromChatId = serverForward.fromChatId;
+  const localFromChatId = localForward?.fromChatId;
+  const shouldPreserveLocalFromChatId = localFromChatId !== undefined
+    && localFromChatId !== serverFromChatId
+    && (
+      serverFromChatId === undefined
+      || (selfId !== undefined && serverFromChatId === selfId)
+    );
+
+  if (shouldPreserveLocalFromChatId) {
+    merged = { ...merged, fromChatId: localFromChatId };
+  }
+
+  return merged;
 }
 
 export function createApiMessageFromTypingDraft({

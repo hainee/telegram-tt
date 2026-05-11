@@ -223,10 +223,17 @@ const MessageTranslationSlot = memo(({
 }: MessageTranslationSlotProps) => {
   const { apiUpdate } = getActions();
   const lastContentSignatureRef = useRef<string>();
+  const isFirstDomUpdateRef = useRef(true);
 
   useEffect(() => {
-    const isContentChanged = lastContentSignatureRef.current !== undefined
-      && lastContentSignatureRef.current !== contentSignature;
+    const previousSignature = lastContentSignatureRef.current;
+    const isFirstRun = isFirstDomUpdateRef.current;
+    if (isFirstRun) {
+      isFirstDomUpdateRef.current = false;
+    }
+
+    const isContentChanged = !isFirstRun && previousSignature !== contentSignature;
+
     lastContentSignatureRef.current = contentSignature;
 
     apiUpdate({
@@ -235,7 +242,7 @@ const MessageTranslationSlot = memo(({
       messageId,
       threadId,
       previousLocalId,
-      isContentChanged: isContentChanged || undefined,
+      isContentChanged: isContentChanged ? true : undefined,
     });
   }, [apiUpdate, chatId, contentSignature, messageId, previousLocalId, threadId]);
 
