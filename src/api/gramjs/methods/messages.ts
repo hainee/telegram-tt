@@ -301,6 +301,7 @@ export function sendMessageLocal(
   const {
     chat, lastMessageId, text, entities, replyInfo, suggestedPostInfo, attachment, sticker, story, gif, poll, todo,
     contact, scheduledAt, groupedId, sendAs, wasDrafted, isInvertedMedia, effectId, isPending, messagePriceInStars,
+    md5Id,
   } = params;
 
   if (!chat) return undefined;
@@ -329,6 +330,7 @@ export function sendMessageLocal(
     effectId,
     isPending,
     messagePriceInStars,
+    md5Id,
   );
 
   sendApiUpdate({

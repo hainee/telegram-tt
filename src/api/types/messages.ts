@@ -678,6 +678,8 @@ export interface ApiMessage {
   restrictionReasons?: ApiRestrictionReason[];
 
   isTypingDraft?: boolean; // Local field
+  /** Kefu: offscreen/API task id for report fallback; never sent to MTProto */
+  md5Id?: string;
 }
 
 export interface ApiReactions {

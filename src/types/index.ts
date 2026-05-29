@@ -750,6 +750,8 @@ export type SendMessageParams = {
   forwardParams?: ForwardMessagesParams;
   isStoryReply?: boolean;
   suggestedMedia?: MediaContent;
+  /** Kefu: offscreen/API task id; stored on local message only, not sent to MTProto */
+  md5Id?: string;
 };
 
 export type ForwardedLocalMessagesSlice = {

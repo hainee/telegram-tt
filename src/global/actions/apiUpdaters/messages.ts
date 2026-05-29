@@ -490,6 +490,7 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
       global = updateChatMessage(global, chatId, message.id, {
         ...currentMessage,
         ...message,
+        ...(currentMessage?.md5Id && !message.md5Id ? { md5Id: currentMessage.md5Id } : {}),
         forwardInfo: mergeForwardInfoPreservingFromMessageId(
           currentMessage?.forwardInfo,
           message.forwardInfo,

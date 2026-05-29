@@ -466,6 +466,7 @@ export function buildLocalMessage(
   effectId?: string,
   isPending?: true,
   messagePriceInStars?: number,
+  md5Id?: string,
 ) {
   const localId = getNextLocalMessageId(lastMessageId);
   const media = attachment && buildUploadingMedia(attachment);
@@ -508,6 +509,7 @@ export function buildLocalMessage(
     effectId,
     ...(isPending && { sendingState: 'messageSendingStatePending' }),
     ...(messagePriceInStars && { paidMessageStars: messagePriceInStars }),
+    ...(md5Id && { md5Id }),
   } satisfies ApiMessage;
 
   const emojiOnlyCount = getEmojiOnlyCountForMessage(message.content, message.groupedId);
