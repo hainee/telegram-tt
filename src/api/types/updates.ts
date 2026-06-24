@@ -599,6 +599,13 @@ export type ApiUpdatePeerBlocked = {
   isBlockedFromStories?: boolean;
 };
 
+// 由本地 block/unblock 操作主动触发，不依赖服务端推送
+export type ApiUpdatePeerBlockedLocal = {
+  '@type': 'updatePeerBlockedLocal';
+  id: string;
+  isBlocked: boolean;
+};
+
 export type ApiUpdatePaymentVerificationNeeded = {
   '@type': 'updatePaymentVerificationNeeded';
   url: string;
@@ -931,7 +938,7 @@ export type ApiUpdate = (
   ApiUpdateDeleteSavedHistory | ApiUpdatePremiumFloodWait | ApiUpdateStarsBalance | ApiUpdateBotCommands |
   ApiUpdateQuickReplyMessage | ApiUpdateQuickReplies | ApiDeleteQuickReply | ApiUpdateDeleteQuickReplyMessages |
   ApiUpdateDeleteProfilePhoto | ApiUpdateNewProfilePhoto | ApiUpdateEntities | ApiUpdatePaidReactionPrivacy |
-  ApiUpdateLangPackTooLong | ApiUpdateLangPack | ApiUpdateNotSupportedInFrozenAccountError
+  ApiUpdateLangPackTooLong | ApiUpdateLangPack | ApiUpdateNotSupportedInFrozenAccountError | ApiUpdatePeerBlockedLocal
 );
 
 export type OnApiUpdate = (update: ApiUpdate) => void;

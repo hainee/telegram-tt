@@ -282,6 +282,13 @@ addActionHandler('blockUser', async (global, actions, payload): Promise<void> =>
   global = getGlobal();
   global = addBlockedUser(global, userId);
   setGlobal(global);
+
+  // 本地 block 操作主动触发 updatePeerBlockedLocal 事件，供外部（如客服系统）监听
+  actions.apiUpdate({
+    '@type': 'updatePeerBlockedLocal',
+    id: userId,
+    isBlocked: true,
+  });
 });
 
 addActionHandler('unblockUser', async (global, actions, payload): Promise<void> => {
@@ -299,6 +306,13 @@ addActionHandler('unblockUser', async (global, actions, payload): Promise<void> 
   global = getGlobal();
   global = removeBlockedUser(global, userId);
   setGlobal(global);
+
+  // 本地 unblock 操作主动触发 updatePeerBlockedLocal 事件，供外部（如客服系统）监听
+  actions.apiUpdate({
+    '@type': 'updatePeerBlockedLocal',
+    id: userId,
+    isBlocked: false,
+  });
 });
 
 addActionHandler('loadNotificationExceptions', async (global): Promise<void> => {

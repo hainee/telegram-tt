@@ -270,6 +270,14 @@ addActionHandler('restartBot', async (global, actions, payload): Promise<void> =
   global = getGlobal();
   global = removeBlockedUser(global, bot.id);
   setGlobal(global);
+
+  // 本地 unblock 操作主动触发 updatePeerBlockedLocal 事件，供外部监听
+  actions.apiUpdate({
+    '@type': 'updatePeerBlockedLocal',
+    id: bot.id,
+    isBlocked: false,
+  });
+
   void sendBotCommand(chat, '/start', undefined, selectSendAs(global, chatId), lastMessageId);
 });
 

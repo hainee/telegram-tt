@@ -58,6 +58,10 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
       break;
     }
 
+    case 'updatePeerBlockedLocal':
+      // 由本地 block/unblock handler 直接更新状态，此处无需重复处理；仅用于事件路由，供外部（如客服系统）监听
+      return global;
+
     case 'updatePeerBlocked':
       if (update.isBlocked) {
         return addBlockedUser(global, update.id);
