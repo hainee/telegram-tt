@@ -385,11 +385,13 @@ export async function notifyAboutCall({
 
   const icon = await getAvatar(user);
 
-  const options: NotificationOptions = {
+  const options = {
     body: getUserFullName(user),
     icon,
     badge: icon,
     tag: `call_${call.id}`,
+    // 通知上携带 chatId，供外部（如客服系统）识别来电联系人
+    chatId: user.id,
   };
 
   if ('vibrate' in navigator) {
@@ -397,6 +399,7 @@ export async function notifyAboutCall({
     options.vibrate = [200, 100, 200];
   }
 
+  // @ts-ignore chatId 是自定义属性
   const notification = new Notification(oldTranslate('VoipIncoming'), options);
 
   notification.onclick = () => {
@@ -469,11 +472,13 @@ export async function notifyAboutMessage({
     }
   } else {
     const dispatch = getActions();
-    const options: NotificationOptions = {
+    const options = {
       body,
       icon,
       badge: icon,
       tag: String(message.id),
+      // 通知上携带 chatId，供外部（如客服系统）识别消息来源
+      chatId: chat.id,
     };
 
     if ('vibrate' in navigator) {
@@ -481,6 +486,7 @@ export async function notifyAboutMessage({
       options.vibrate = [200, 100, 200];
     }
 
+    // @ts-ignore chatId 是自定义属性
     const notification = new Notification(title, options);
 
     notification.onclick = () => {

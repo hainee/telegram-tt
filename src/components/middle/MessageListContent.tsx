@@ -395,7 +395,7 @@ const MessageListContent = ({
       const firstMessage = isAlbum(firstMessageOrAlbum) ? firstMessageOrAlbum.mainMessage : firstMessageOrAlbum;
       const firstMessageId = getMessageOriginalId(firstMessage);
 
-      const key = `${firstMessageId}-${lastMessageId}`;
+      const key = String(firstMessageId);
       const id = (firstMessageId === lastMessageId) ? `message-group-${firstMessageId}`
         : `message-group-${firstMessageId}-${lastMessageId}`;
 
@@ -404,6 +404,7 @@ const MessageListContent = ({
         <SenderGroupContainer
           key={key}
           id={id}
+          dataKey={key}
           message={lastMessage}
           withAvatar={withAvatar}
           appearanceOrder={lastAppearanceOrder}

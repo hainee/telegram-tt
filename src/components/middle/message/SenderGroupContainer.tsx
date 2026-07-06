@@ -47,6 +47,7 @@ type OwnProps =
     withAvatar?: boolean;
     children: React.ReactNode;
     id: string;
+    dataKey?: string;
     appearanceOrder: number;
     canPost?: boolean;
   };
@@ -65,6 +66,7 @@ const SenderGroupContainer: FC<OwnProps & StateProps> = ({
   withAvatar,
   children,
   id,
+  dataKey,
   appearanceOrder,
   sender,
   canShowSender,
@@ -202,7 +204,7 @@ const SenderGroupContainer: FC<OwnProps & StateProps> = ({
   );
 
   return (
-    <div id={id} className={className}>
+    <div id={id} className={className} data-key={dataKey}>
       {shouldRender && (
         <div ref={avatarRef} className={styles.avatarContainer}>
           {renderAvatar()}
